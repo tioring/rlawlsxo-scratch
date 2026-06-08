@@ -1,6 +1,10 @@
 # --- 세션/작업 상태 (프로젝트 코드 아님) ---
 .remember/
 
+# --- 배포 제외: 개발 부산물 (런타임엔 index.html+soundtouch.js만 필요) ---
+_index_baseline.html
+spike-*.html
+
 # --- Claude Code 로컬 전용 설정 (launch.json은 추적 유지) ---
 .claude/settings.local.json
 .claude/*.local.json
