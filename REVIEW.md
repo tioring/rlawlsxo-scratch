@@ -67,3 +67,27 @@
 - `createDeck`가 window pointer 리스너를 덱별 등록(양 덱 onMove가 매 이벤트 실행 — dragging 가드로 무해하나 결합)
 
 > 이들은 대부분 **저심각·설계 판단** 영역이라 의도적으로 보류. Round 2(맥스 뎁스) 재리뷰 + 사용자 결정 대상.
+
+---
+
+## 🔁 Round 2 — Phase B 재리뷰 결과 (2026-06-08)
+
+**Phase B**: 144 agents · 578만 토큰 · ~29분. 수정된 코드 위에서 7개 클러스터 개별 검증 + parity 3패스 + 14차원 재리뷰 + 결함당 3인 투표 패널.
+
+### 검증 결과
+- ✅ **Round 1의 7개 수정 전부 "정확·parity 보존" 판정** (`fix_correct=false` 0건).
+- ✅ parity 3패스 모두 per-sample DSP **byte-identical** 확인 (내가 추가한 roll-reset·denormal 2줄 포함).
+- 🔵 parity divergence 3건 = 전부 **동일한 1건** = 이미 deferred한 상태보고 8x 주기(오디오 동일, UI 갱신 빈도만 차이).
+
+### Round 2 수정 (커밋 `5672b73`) — 대부분 "Round 1 수정의 2차 효과"
+| 심각도 | 항목 | 비고 |
+|---|---|---|
+| high | 대용량 파일 OOM | `file.size>150MB` 게이트 (deferred 항목, 회귀 아님) |
+| med | BPM 검출 실패 시 타임스트레치 침묵 막힘 | 내 BPM 강화로 흔해짐 → 수동 BPM으로 `originalBpm` 확보 + 피드백 |
+| med | reload 시 processor `playing` 데싱크(클릭/DC) | 내 pushBuffer 경로 → load 후 `play:false` 전송 |
+| med | `ensureRunning` 누락(스크래치/cue/seek/roll) | 내 resume 수정이 play/R에만 → 핵심 제스처에 확장 |
+| low | 디코드 실패 시 옛 파형 잔존 | 내 회귀 → waveData/waveCache+BPM 비움+캔버스 clear |
+| med→low | roll패드/EQ노브 lostpointercapture latch | lostpointercapture+contextmenu+e.buttons 가드 |
+
+### ⏳ Round 2 이후에도 미적용 (전부 low/nit — 의도적 보류)
+상태보고 8x 주기(UI 평활도, fallback 한정) · per-frame 양덱 redraw 비용 · DPR 블러 · `analyzeWaveform` IIR warmup · intro 모달 단축키 누수 · `out[0].length` 가드 · channelData/state-msg 할당 nit · Blob URL revoke · per-deck window 리스너 · animate 크로스페이더 stomp(거의 무해).
