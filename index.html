@@ -460,6 +460,36 @@
     .faders { gap: 24px; }
   }
 
+  /* ===== 토스트 랙 — 섀시에서 튀어나오는 머신드 메탈 상태 모듈 (UX tournament winner, 8.7) ===== */
+  .toast-rack { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%); z-index: 950; display: flex; flex-direction: column-reverse; gap: 9px; width: max-content; max-width: min(440px, 92vw); pointer-events: none; }
+  .hw-toast {
+    --rail: var(--metal-hi); --led: var(--lcd); pointer-events: auto;
+    display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; padding: 11px 13px 11px 12px;
+    background: repeating-linear-gradient(90deg, rgba(255,255,255,0.020) 0 1px, transparent 1px 3px), linear-gradient(180deg, var(--metal-1) 0%, var(--metal-2) 100%);
+    border: 1px solid #0c0d10; border-left: 3px solid var(--rail); border-radius: 8px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.10), inset 0 -3px 7px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(0,0,0,0.4), 0 14px 30px rgba(0,0,0,0.6), 0 0 0 1px var(--rail-glow, transparent);
+    opacity: 0; transform: translateY(14px) scale(0.985);
+    transition: opacity .22s ease, transform .26s cubic-bezier(.2,.9,.25,1.05), box-shadow .18s ease; will-change: transform, opacity;
+  }
+  .hw-toast.show { opacity: 1; transform: translateY(0) scale(1); }
+  .hw-toast.eject { opacity: 0; transform: translateY(12px) scale(0.99); transition: opacity .2s ease, transform .3s ease; }
+  .hw-toast[data-deck="A"] { --rail: var(--accent); --rail-glow: rgba(255,216,58,0.28); }
+  .hw-toast[data-deck="B"] { --rail: var(--accentB); --rail-glow: rgba(46,155,255,0.30); }
+  .hw-toast[data-kind="lock"] { --led: #ff5e3a; }
+  .hw-toast[data-kind="warn"] { --led: var(--accent); }
+  .hwt-led { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; align-self: center; background: radial-gradient(circle at 38% 32%, #fff 0 8%, var(--led) 45%, color-mix(in srgb, var(--led) 55%, #000) 100%); box-shadow: 0 0 7px var(--led), 0 0 2px var(--led), inset 0 0 2px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,0,0,0.55); animation: hwtLedBreath 1.8s ease-in-out infinite; }
+  @keyframes hwtLedBreath { 0%,100% { filter: brightness(1); } 50% { filter: brightness(1.55); } }
+  .hw-toast.pulse .hwt-led { animation: hwtLedHit .22s ease; }
+  @keyframes hwtLedHit { 0% { filter: brightness(2.4); transform: scale(1.18); } 100% { filter: brightness(1); transform: scale(1); } }
+  .hwt-screen { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 7px 11px; border-radius: 5px; background: linear-gradient(180deg, var(--lcd-bg), #04100b); border: 1px solid #14352a; box-shadow: inset 0 0 16px rgba(0,0,0,0.75), inset 0 1px 1px rgba(0,0,0,0.6); }
+  .hwt-glyph { font-family: "JetBrains Mono", monospace; font-size: 13px; color: var(--led); text-shadow: 0 0 7px var(--led); flex: 0 0 auto; line-height: 1; }
+  .hwt-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  .hwt-title { font-family: "Barlow Semi Condensed", sans-serif; font-weight: 700; font-size: 9px; letter-spacing: 2px; text-transform: uppercase; color: var(--lcd-dim); line-height: 1.1; }
+  .hwt-title:empty { display: none; }
+  .hwt-msg { font-family: "JetBrains Mono", monospace; font-size: 12px; color: var(--lcd); line-height: 1.35; letter-spacing: .2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 300px; }
+  .hwt-key { flex: 0 0 auto; font-family: "JetBrains Mono", monospace; font-size: 10px; font-weight: 700; color: var(--text); letter-spacing: 1px; padding: 5px 9px 6px; border-radius: 5px; background: linear-gradient(180deg, #2f343b, #1a1d22); border: 1px solid #0c0d10; box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), inset 0 -2px 4px rgba(0,0,0,0.5), 0 2px 3px rgba(0,0,0,0.5); }
+  @media (prefers-reduced-motion: reduce) { .hw-toast { transition: opacity .12s linear; transform: none; } .hw-toast.show, .hw-toast.eject { transform: none; } .hwt-led, .hw-toast.pulse .hwt-led { animation: none; } }
+
   /* ===== a11y: 키보드 포커스 링 (UX audit — 모든 range가 outline:none인데 대체 없음, WCAG 2.4.7) ===== */
   :where(button, input, [tabindex], .eq-knob):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .deck-side[data-deck="B"] :focus-visible, .ch[data-deck="B"] :focus-visible, [data-deck="B"].hotcues :focus-visible, [data-deck="B"].rollpads :focus-visible, #vol_B:focus-visible { outline-color: var(--accentB); }
@@ -2333,6 +2363,67 @@ const cfcKeyEls = {};
 document.querySelectorAll('#cfKeys span[data-code]').forEach(s => { cfcKeyEls[s.dataset.code] = s; });
 const CF_KEY_LABEL = { KeyQ: 'Q', KeyW: 'W', KeyE: 'E' };
 function cfcRoleFor(code, latchKey) { if (code === latchKey) return 'ANCHOR'; return code === 'KeyE' ? '홀드컷' : '펄스컷'; }
+
+// ============================================================
+// 하드웨어 상태 모듈 토스트 (rack-eject) — net-new, 무의존 (UX tournament winner 8.7)
+//   showToast({title,msg,key,kind,deck,duration,id}) · showToast("문자열")
+//   kind: 'lock'|'mode'|'info'|'warn' · deck:'A'|'B' · id지정시 동일토스트 LED 재펄스 · duration<=0 수동 dismiss
+// ============================================================
+const TOAST_GLYPH = { lock: '◉', mode: '▣', info: '▸', warn: '⚠' };
+const _toastTimers = new WeakMap();
+let _toastRack = null;
+const _toastHost = () => (_toastRack || (_toastRack = document.getElementById('toastRack')));
+function showToast(opts) {
+  const o = (typeof opts === 'string') ? { msg: opts } : (opts || {});
+  const host = _toastHost();
+  if (!host) return null;
+  const deck = (o.deck === 'A' || o.deck === 'B') ? o.deck : null;
+  const kind = o.kind || 'info';
+  const dur = (o.duration == null) ? 3200 : o.duration;
+  const id = o.id || null;
+  let el = id ? host.querySelector('.hw-toast[data-tid="' + id + '"]') : null;
+  const isNew = !el;
+  if (isNew) {
+    el = document.createElement('div');
+    el.className = 'hw-toast'; el.setAttribute('role', 'status');
+    if (id) el.setAttribute('data-tid', id);
+    el.innerHTML =
+      '<span class="hwt-led" aria-hidden="true"></span>' +
+      '<span class="hwt-screen"><span class="hwt-glyph" aria-hidden="true"></span>' +
+        '<span class="hwt-body"><b class="hwt-title"></b><span class="hwt-msg"></span></span></span>' +
+      '<kbd class="hwt-key"></kbd>';
+  }
+  el.dataset.kind = kind;
+  if (deck) el.dataset.deck = deck; else el.removeAttribute('data-deck');
+  el.querySelector('.hwt-glyph').textContent = TOAST_GLYPH[kind] || TOAST_GLYPH.info;
+  el.querySelector('.hwt-title').textContent = o.title || '';
+  el.querySelector('.hwt-msg').textContent = o.msg || '';
+  const keyEl = el.querySelector('.hwt-key');
+  if (o.key) { keyEl.textContent = o.key; keyEl.style.display = ''; } else keyEl.style.display = 'none';
+  if (isNew) {
+    host.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('show'));
+  } else {
+    el.classList.add('pulse');
+    setTimeout(() => el.classList.remove('pulse'), 220);
+  }
+  const prev = _toastTimers.get(el);
+  if (prev) clearTimeout(prev);
+  if (dur > 0) _toastTimers.set(el, setTimeout(() => dismissToast(el), dur));
+  return el;
+}
+function dismissToast(el) {
+  if (typeof el === 'string') { const h = _toastHost(); el = h && h.querySelector('.hw-toast[data-tid="' + el + '"]'); }
+  if (!el || el._closing) return;
+  el._closing = true;
+  const prev = _toastTimers.get(el);
+  if (prev) clearTimeout(prev);
+  el.classList.remove('show'); el.classList.add('eject');
+  let done = false;
+  const fin = () => { if (done) return; done = true; el.remove(); };
+  el.addEventListener('transitionend', fin, { once: true });
+  setTimeout(fin, 360);
+}
 crossfaderEl.addEventListener('input', () => {
   cfCtl.forceNormal();    // A3: 마우스 드래그 = 래치 해제 (마우스 우선)
   crossfade = parseFloat(crossfaderEl.value);
@@ -2394,6 +2485,7 @@ aaBtn.addEventListener('click', () => {
   aaEnabled = !aaEnabled;
   aaBtn.textContent = `Anti-Alias: ${aaEnabled ? 'ON' : 'OFF'}`;
   aaBtn.classList.toggle('active', aaEnabled);
+  showToast({ title: '엔진', msg: `안티에일리어스 ${aaEnabled ? '켜짐' : '꺼짐'}`, kind: 'mode', id: 'aa' });
   [deckA, deckB].forEach(d => { if (d.node) d.node.port.postMessage({ type: 'aa', value: aaEnabled }); });
 });
 
@@ -2547,5 +2639,7 @@ animate();
 })();
 </script>
 
+<!-- 하드웨어 상태 모듈 토스트 랙 (UX tournament: rack-eject) — showToast()가 동적 생성 -->
+<div id="toastRack" class="toast-rack" aria-live="polite" aria-relevant="additions"></div>
 </body>
 </html>
