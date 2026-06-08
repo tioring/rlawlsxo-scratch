@@ -1837,7 +1837,9 @@ function createDeck(id) {
     if (!deck.buffer) return;
     ensureRunning();
     e.preventDefault();
+    // (Phase 2 hook) precision 모드면 여기서 분기: lockActive 세팅 + Pointer Lock 요청 + dragging 미설정 (C7) + armIdleStop 금지 (C10)
     deck.dragging = true;
+    deck.scratchSource = 'platter';
     el.platter.classList.add('scratching');
     const rect = el.platter.getBoundingClientRect();
     const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
@@ -1879,16 +1881,23 @@ function createDeck(id) {
     }
     deck.lastTime = endTime;
   }
+  // 모든 스크래치 종료 공용 (idempotent) — platter/zoom 공유, precision도 향후 여기로 (PLAN §3.1)
+  function endScratch() {
+    if (deck.scratchSource == null) return;
+    clearTimeout(deck.idleTimer);
+    deck.node.port.postMessage({ type: 'scratch-end', smoothing: VINYL_SMOOTHING });
+    deck.scratchSource = null;
+  }
   function onUp() {
     if (!deck.dragging) return;
     deck.dragging = false;
-    clearTimeout(deck.idleTimer);
     el.platter.classList.remove('scratching');
-    deck.node.port.postMessage({ type: 'scratch-end', smoothing: VINYL_SMOOTHING });
+    endScratch();
   }
   window.addEventListener('pointermove', onMove);
   window.addEventListener('pointerup', onUp);
   window.addEventListener('pointercancel', onUp);
+  el.platter.addEventListener('lostpointercapture', () => { if (deck.scratchSource === 'platter') onUp(); });   // Fold-2: capture 분실 시 stuck 방지 (vinyl만 — precision은 capture 미사용)
 
   // --- 파일 입력 (label이 input을 자동 트리거 → 별도 click 핸들러 없음: 이중 다이얼로그 버그 수정) ---
   el.fileInput.addEventListener('change', (e) => {
@@ -1934,6 +1943,7 @@ function createDeck(id) {
       ensureRunning();
       e.preventDefault();
       zDrag = true;
+      deck.scratchSource = 'zoom';
       zLastY = e.clientY; zStartY = e.clientY;
       zLastT = zDownT = performance.now();
       zMoved = 0;
@@ -1967,7 +1977,6 @@ function createDeck(id) {
     function zUp(e) {
       if (!zDrag) return;
       zDrag = false;
-      clearTimeout(deck.idleTimer);
       el.zoom.classList.remove('scrubbing');
       // 거의 움직이지 않은 짧은 탭 → 그 지점으로 점프
       if (zMoved < 5 && (performance.now() - zDownT) < 250 && deck.buffer) {
@@ -1977,7 +1986,7 @@ function createDeck(id) {
         const tx = t + off * (ZOOM_WINDOW_SEC / rect.height);
         deck.node.port.postMessage({ type: 'seek', value: Math.max(0, tx * deck.buffer.sampleRate) });
       }
-      deck.node.port.postMessage({ type: 'scratch-end', smoothing: VINYL_SMOOTHING });
+      endScratch();   // 공용 종료 (idle clear + scratch-end + source reset)
     }
     el.zoom.addEventListener('pointerup', zUp);
     el.zoom.addEventListener('pointercancel', zUp);
