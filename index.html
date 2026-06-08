@@ -2183,33 +2183,18 @@ function createDeck(id) {
   });
   el.platter.addEventListener('contextmenu', e => e.preventDefault());
 
-  // --- PRECISION (Pointer Lock 미세 스크럽 + throw 관성) — spike 검증: pointerup이 락 유지(B1), clientX/Y frozen→movement만, ±127 포화는 코스트로 보완, Esc는 pointerlockchange로만 ---
-  let precVel = 0, precCoastRAF = 0, precIdleTimer = 0;
-  function precStopCoast() { if (precCoastRAF) cancelAnimationFrame(precCoastRAF); precCoastRAF = 0; clearTimeout(precIdleTimer); }
-  function precCoast(v0) {   // 놓기 직전 속도(v0)에서 지수 감쇠로 굴림 = 회전 관성
-    precStopCoast();
-    let cv = Math.max(-INERTIA_MAX, Math.min(INERTIA_MAX, v0));
-    const step = () => {
-      if (!deck.lockActive || !deck.node || Math.abs(cv) < INERTIA_MIN) { if (deck.node) deck.node.port.postMessage({ type: 'scratch-velocity', value: 0 }); precCoastRAF = 0; return; }
-      deck.node.port.postMessage({ type: 'scratch-velocity', value: cv });
-      cv *= INERTIA_DECAY;
-      precCoastRAF = requestAnimationFrame(step);
-    };
-    precCoastRAF = requestAnimationFrame(step);
-  }
+  // --- PRECISION (Pointer Lock 미세 스크럽) — 정확 추종, 관성 없음(손 멈추면 그 자리 정지). spike: pointerup 락유지(B1), clientX/Y frozen→movement만, Esc는 pointerlockchange로만 ---
   document.addEventListener('pointermove', (e) => {
     if (document.pointerLockElement !== el.platter || !deck.lockActive || !deck.node) return;
-    precStopCoast();   // 새 움직임 = 관성 중단(손이 다시 잡음)
     const now = performance.now();
     const dt = (now - deck.lastTime) / 1000;
     deck.lastTime = now;
     if (dt <= 0 || dt > 0.2) return;
-    let vel = (e.movementX / dt) * PRECISION_GAIN / 1000;   // px/s → 재생속도 (raw, OS 가속 없음)
+    let vel = (e.movementX / dt) * PRECISION_GAIN / 1000;   // px/s → 재생속도 (raw, OS 가속 없음 — 1:1 정밀 추종)
     if (!isFinite(vel)) return;
     if (vel > PRECISION_MAX) vel = PRECISION_MAX; else if (vel < -PRECISION_MAX) vel = -PRECISION_MAX;
-    precVel = (Math.abs(vel) > Math.abs(precVel)) ? vel : precVel * 0.9;   // 최근 throw 피크 유지(감쇠) — 던지기 에너지 기억(꼬리 감속으로 안 죽음)
     deck.node.port.postMessage({ type: 'scratch-velocity', value: vel });
-    precIdleTimer = setTimeout(() => { precCoast(precVel * INERTIA_BOOST); precVel = 0; }, 55);   // 손 멈춤=놓음 → 관성 발사(BOOST=놓기 직전 추가 가속)
+    armIdleStop();   // 손 멈추면 정지 = 그 위치 정확히 유지 (정밀의 핵심). 폭주 방지
   });
   document.addEventListener('pointerlockchange', () => {
     const locked = document.pointerLockElement === el.platter;
@@ -2219,8 +2204,8 @@ function createDeck(id) {
       if (deck.node) deck.node.port.postMessage({ type: 'scratch-start' });
       showToast({ deck: id, kind: 'lock', id: 'plk' + id, duration: 0, title: '정밀 모드', msg: '커서 잠금 · 미세 스크럽 · 버튼 떼도 유지', key: 'ESC' });
     } else if (!locked && deck.lockActive) {
-      deck.lockActive = false; deck.scratchSource = null; precVel = 0;
-      precStopCoast(); clearTimeout(deck.idleTimer);
+      deck.lockActive = false; deck.scratchSource = null;
+      clearTimeout(deck.idleTimer);
       el.platter.classList.remove('scratching');
       if (deck.node) deck.node.port.postMessage({ type: 'scratch-end', smoothing: VINYL_SMOOTHING });
       dismissToast('plk' + id);
@@ -2391,12 +2376,8 @@ sizeCanvas(deckA); sizeCanvas(deckB);
 });
 
 // 플래터 모드 토글 (VINYL ↔ 정밀 Pointer Lock) — RIM PLATE (UX tournament) + spike 검증
-const PRECISION_GAIN = 0.55;   // 정밀 스크럽 감도 (movementX px/s → 재생속도) — 튜닝값
-const PRECISION_MAX = 12;      // 정밀 스크럽 속도 클램프 (±배속)
-const INERTIA_BOOST = 1.6;     // throw 관성: 놓기 직전 피크속도 × 이만큼이 코스트 시작 (놓기 직전 추가 가속)
-const INERTIA_DECAY = 0.92;    // 관성 코스트 프레임당 감쇠 (1에 가까울수록 오래 굴름, ~60fps)
-const INERTIA_MIN = 0.05;      // 코스트 정지 임계
-const INERTIA_MAX = 18;        // 코스트 시작 속도 상한 (±배속)
+const PRECISION_GAIN = 0.5;    // 정밀 스크럽 감도 (movementX px/s → 재생속도) — 첫 클린 측정(20~80px/ev) 기준, 정확 추종
+const PRECISION_MAX = 10;      // 정밀 스크럽 속도 클램프 (±배속)
 const PRECISION_SUPPORTED = ('requestPointerLock' in HTMLElement.prototype) && matchMedia('(pointer: fine)').matches && !matchMedia('(pointer: coarse)').matches;
 if (!PRECISION_SUPPORTED) document.body.classList.add('no-precision');
 ['A', 'B'].forEach(id => {
