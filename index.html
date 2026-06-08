@@ -309,8 +309,48 @@
   .crossfader-row input[type=range]::-moz-range-thumb { width: 20px; height: 30px; border-radius: 5px; background: linear-gradient(180deg,#eef1f5,#b6bcc6); border: 1px solid #05070a; cursor: ew-resize; box-shadow: 0 3px 7px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.8); }
   #crossfader.latched { box-shadow: 0 0 0 2px #ff5e3a, 0 0 14px rgba(255,94,58,0.6); border-radius: 5px; }   /* 래치 컷 활성 표시 (Phase 4) */
   .cf-label { text-align: center; font-size: 10px; color: var(--dim); letter-spacing: 1px; margin-top: 8px; text-transform: uppercase; }
-  .cf-keys { display: flex; justify-content: space-between; padding: 0 14px; margin-top: 8px; }
-  .cf-keys span { font-family: "JetBrains Mono", monospace; font-size: 9px; color: var(--dimmer); border: 1px solid var(--line-soft); border-radius: 4px; padding: 2px 8px; background: #0a0b0d; }
+  /* ===== LATCH CUT CONSOLE — explicit HUD (UX tournament winner, replaces static .cf-keys) ===== */
+  .cf-console { margin-top: 8px; padding: 0 14px; }
+  .cfc-banner {
+    display: flex; align-items: center; gap: 8px; height: 0; margin-bottom: 0; padding: 0 9px;
+    border: 1px solid transparent; border-radius: 5px; background: rgba(255,94,58,0.06);
+    font-family: "Barlow Semi Condensed", sans-serif; text-transform: uppercase; letter-spacing: 2px;
+    font-size: 10px; font-weight: 700; color: var(--dimmer); overflow: hidden; opacity: 0;
+    transition: height .16s ease, opacity .16s ease, margin-bottom .16s ease, border-color .16s ease, box-shadow .16s ease;
+    will-change: opacity, box-shadow;
+  }
+  #cfConsole.is-latched .cfc-banner {
+    height: 24px; margin-bottom: 8px; opacity: 1; border-color: #ff5e3a; color: var(--text);
+    box-shadow: 0 0 0 1px rgba(255,94,58,0.35), 0 0 16px rgba(255,94,58,0.32), inset 0 0 10px rgba(255,94,58,0.10);
+  }
+  .cfc-led { width: 7px; height: 7px; border-radius: 50%; background: #ff5e3a; flex: 0 0 auto; box-shadow: 0 0 8px #ff5e3a, 0 0 14px rgba(255,94,58,0.7); }
+  #cfConsole.is-latched .cfc-led { animation: cfcPulse 1.05s ease-in-out infinite; }
+  .cfc-title { color: #ff5e3a; }
+  .cfc-anchor { font-family: "JetBrains Mono", monospace; letter-spacing: 1px; font-weight: 700; font-size: 9px; color: var(--text); padding: 2px 7px; border-radius: 4px; background: rgba(255,94,58,0.16); border: 1px solid rgba(255,94,58,0.45); }
+  .cfc-mode { margin-left: auto; font-size: 9px; letter-spacing: 1px; color: var(--dim); }
+  #cfConsole.is-latched .cfc-mode { color: #ff5e3a; }
+  @keyframes cfcPulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .45; transform: scale(.82); } }
+  .cf-keys { display: flex; justify-content: space-between; padding: 0; margin: 0; }
+  .cf-keys span {
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    font-family: "JetBrains Mono", monospace; font-size: 9px; color: var(--dimmer);
+    border: 1px solid var(--line-soft); border-radius: 4px; padding: 3px 8px 4px; background: #0a0b0d; min-width: 52px;
+    transition: color .14s ease, border-color .14s ease, box-shadow .12s ease, background .14s ease; will-change: box-shadow;
+  }
+  .cf-keys span b { font-weight: 700; font-size: 11px; color: var(--dim); line-height: 1; }
+  .cf-keys .cfc-role { font-style: normal; font-size: 7px; letter-spacing: .5px; height: 8px; color: transparent; text-transform: uppercase; line-height: 1; transition: color .14s ease; }
+  #cfConsole.is-latched .cf-keys span { border-color: rgba(255,94,58,0.28); }
+  #cfConsole.is-latched .cf-keys span b { color: var(--text); }
+  #cfConsole.is-latched .cf-keys .cfc-role { color: var(--dim); }
+  #cfConsole.is-latched .cf-keys span.is-anchor { border-color: #ff5e3a; background: rgba(255,94,58,0.10); box-shadow: 0 0 0 1px rgba(255,94,58,0.4), 0 0 12px rgba(255,94,58,0.25); }
+  #cfConsole.is-latched .cf-keys span.is-anchor b, #cfConsole.is-latched .cf-keys span.is-anchor .cfc-role { color: #ff5e3a; }
+  .cf-keys span.cfc-fire { color: #fff; border-color: #ff5e3a; background: rgba(255,94,58,0.30); box-shadow: 0 0 0 2px #ff5e3a, 0 0 18px rgba(255,94,58,0.85); animation: cfcFire .16s ease-out; }
+  .cf-keys span.cfc-fire b, .cf-keys span.cfc-fire .cfc-role { color: #fff; }
+  @keyframes cfcFire { 0% { transform: scale(1.10); } 100% { transform: scale(1); } }
+  .cf-keys span.cfc-hold { color: #fff; border-color: #ff5e3a; background: rgba(255,94,58,0.22); box-shadow: 0 0 0 2px #ff5e3a, 0 0 16px rgba(255,94,58,0.7); }
+  .cf-keys span.cfc-hold b, .cf-keys span.cfc-hold .cfc-role { color: #fff; }
+  .cfc-hint { margin-top: 7px; text-align: center; font-family: "JetBrains Mono", monospace; font-size: 8px; letter-spacing: 2px; color: var(--dimmer); text-transform: uppercase; transition: opacity .16s ease; opacity: .65; }
+  #cfConsole.is-latched .cfc-hint { opacity: 0; }
   .cf-curve { display: flex; gap: 6px; justify-content: center; margin-top: 12px; }
   /* ===== 설정 — 섹션별 풀스크린 팝업 레이어 ===== */
   .deck-head-right { display: flex; align-items: center; gap: 8px; }
@@ -550,7 +590,20 @@
         <input type="range" id="crossfader" min="0" max="1" step="0.001" value="0.5">
         <span class="deck-tag">B</span>
       </div>
-      <div class="cf-keys"><span>Q</span><span>W</span><span>E</span></div>
+      <div class="cf-console" id="cfConsole">
+        <div class="cfc-banner" id="cfcBanner">
+          <span class="cfc-led"></span>
+          <span class="cfc-title">래치 컷</span>
+          <span class="cfc-anchor" id="cfcAnchor">ANCHOR ▸ —</span>
+          <span class="cfc-mode" id="cfcMode">대기</span>
+        </div>
+        <div class="cf-keys" id="cfKeys">
+          <span data-code="KeyQ"><b>Q</b><i class="cfc-role"></i></span>
+          <span data-code="KeyW"><b>W</b><i class="cfc-role"></i></span>
+          <span data-code="KeyE"><b>E</b><i class="cfc-role"></i></span>
+        </div>
+        <div class="cfc-hint" id="cfcHint">SHIFT + Q/W/E = 래치 컷</div>
+      </div>
       <div class="set-panel" id="setPanel_mixer">
         <div class="set-inner">
           <div class="set-head"><div class="set-title"><b>Mixer</b> · 설정</div><button class="set-close" title="닫기">✕</button></div>
@@ -1309,10 +1362,10 @@ const cfCtl = {
     }
     if (this.mode === 'latched') {
       if (type === 'down') {
-        if (code === 'KeyQ' || code === 'KeyW') this._pulse();
-        else if (code === 'KeyE') this._rampTo(this.cutRail());   // E 긴컷 누름
+        if (code === 'KeyQ' || code === 'KeyW') { this._pulse(); this._flash(code, 'pulse'); }
+        else if (code === 'KeyE') { this._rampTo(this.cutRail()); this._flash('KeyE', 'hold-on'); }   // E 긴컷 누름
       } else if (code === 'KeyE') {
-        this._rampTo(this.anchor);                               // E 긴컷 해제 = 앵커 복귀
+        this._rampTo(this.anchor); this._flash('KeyE', 'hold-off');   // E 긴컷 해제 = 앵커 복귀
       }
       return true;
     }
@@ -1334,7 +1387,30 @@ const cfCtl = {
     this._rampTo(crossfade);                                  // 걸려있던 컷 해제
     this._ui();
   },
-  _ui() { if (typeof crossfaderEl !== 'undefined' && crossfaderEl) crossfaderEl.classList.toggle('latched', this.mode === 'latched'); },
+  _ui() {   // 단일 sync point — 래치 컷 콘솔 HUD 구동 (UX tournament)
+    const on = this.mode === 'latched';
+    if (typeof crossfaderEl !== 'undefined' && crossfaderEl) crossfaderEl.classList.toggle('latched', on);
+    if (typeof cfConsoleEl === 'undefined' || !cfConsoleEl) return;
+    cfConsoleEl.classList.toggle('is-latched', on);
+    if (cfcAnchorEl) cfcAnchorEl.textContent = on ? ('ANCHOR ▸ ' + (CF_KEY_LABEL[this.latchKey] || '—')) : 'ANCHOR ▸ —';
+    if (cfcModeEl) cfcModeEl.textContent = on ? 'ON AIR' : '대기';
+    for (const code in cfcKeyEls) {
+      const el = cfcKeyEls[code]; if (!el) continue;
+      el.classList.toggle('is-anchor', on && this.latchKey === code);
+      const role = el.querySelector('.cfc-role');
+      if (role) role.textContent = on ? cfcRoleFor(code, this.latchKey) : '';
+      if (!on) el.classList.remove('cfc-fire', 'cfc-hold');
+    }
+  },
+  _flash(code, kind) {   // kind: 'pulse' | 'hold-on' | 'hold-off' — 이벤트 구동 전용, rAF 미접촉
+    const el = (typeof cfcKeyEls !== 'undefined') && cfcKeyEls[code]; if (!el) return;
+    if (kind === 'hold-on') { el.classList.add('cfc-hold'); return; }
+    if (kind === 'hold-off') { el.classList.remove('cfc-hold'); return; }
+    el.classList.remove('cfc-fire'); void el.offsetWidth;
+    el.classList.add('cfc-fire');
+    clearTimeout(el._cfcT);
+    el._cfcT = setTimeout(() => el.classList.remove('cfc-fire'), 170);
+  },
 };
 
 // ============================================================
@@ -2214,6 +2290,14 @@ function rollBoth(on) {
 
 // 크로스페이더
 const crossfaderEl = document.getElementById('crossfader');
+// 래치 컷 콘솔 노드 캐시 (UX tournament: latch HUD) — cfCtl._ui()/_flash()가 사용
+const cfConsoleEl = document.getElementById('cfConsole');
+const cfcAnchorEl = document.getElementById('cfcAnchor');
+const cfcModeEl = document.getElementById('cfcMode');
+const cfcKeyEls = {};
+document.querySelectorAll('#cfKeys span[data-code]').forEach(s => { cfcKeyEls[s.dataset.code] = s; });
+const CF_KEY_LABEL = { KeyQ: 'Q', KeyW: 'W', KeyE: 'E' };
+function cfcRoleFor(code, latchKey) { if (code === latchKey) return 'ANCHOR'; return code === 'KeyE' ? '홀드컷' : '펄스컷'; }
 crossfaderEl.addEventListener('input', () => {
   cfCtl.forceNormal();    // A3: 마우스 드래그 = 래치 해제 (마우스 우선)
   crossfade = parseFloat(crossfaderEl.value);
