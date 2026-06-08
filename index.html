@@ -423,13 +423,36 @@
   /* ===== intro modal ===== */
   .intro-overlay { position: fixed; inset: 0; z-index: 1000; background: rgba(0,0,0,0.92); display: flex; align-items: center; justify-content: center; backdrop-filter: blur(3px); }
   .intro-overlay.hidden { display: none; }
-  .intro-modal { background: linear-gradient(180deg,#1a1d22,#101216); border: 1px solid var(--line); border-radius: 14px; padding: 36px 40px; max-width: 600px; margin: 20px; box-shadow: 0 24px 70px rgba(0,0,0,0.7); }
-  .intro-title { font-family: "Barlow Semi Condensed", sans-serif; font-size: 22px; letter-spacing: 6px; color: var(--text); text-align: center; margin: 0; text-transform: uppercase; }
-  .intro-sub { text-align: center; color: var(--dimmer); font-size: 11px; letter-spacing: 3px; margin: 8px 0 24px; text-transform: uppercase; }
-  .intro-help { font-size: 12px; color: var(--dim); line-height: 2; }
-  .intro-help kbd { display: inline-block; padding: 1px 6px; background: #222; border: 1px solid var(--line); border-radius: 3px; font-family: "JetBrains Mono", monospace; font-size: 10px; color: var(--text); }
-  .intro-close { display: block; margin: 28px auto 0; padding: 13px 34px; background: linear-gradient(180deg, var(--accent), var(--A-deep)); color: #0a0b0d; border: none; border-radius: 7px; font-family: "Barlow Semi Condensed", sans-serif; font-size: 13px; font-weight: 700; letter-spacing: 2px; cursor: pointer; text-transform: uppercase; }
+  /* ===== 그룹화 키맵 도움말 (UX tournament winner, 8.3) ===== */
+  .intro-modal { background: linear-gradient(180deg, #1a1d22, #101216); border: 1px solid var(--line); border-radius: 14px; padding: 26px 30px 30px; width: min(640px, calc(100vw - 40px)); max-height: calc(100vh - 48px); overflow-y: auto; margin: 20px; box-shadow: 0 24px 70px rgba(0,0,0,0.6); }
+  .intro-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+  .intro-title { font-family: "Barlow Semi Condensed", sans-serif; font-size: 20px; letter-spacing: 5px; color: var(--text); margin: 0; text-transform: uppercase; }
+  .intro-sub { color: var(--dimmer); font-size: 10px; letter-spacing: 3px; margin: 7px 0 0; text-transform: uppercase; }
+  .intro-x { flex: 0 0 auto; width: 30px; height: 30px; border-radius: 7px; background: transparent; border: 1px solid var(--line-soft); color: var(--dim); font-size: 13px; line-height: 1; cursor: pointer; transition: color .14s ease, border-color .14s ease; }
+  .intro-x:hover { color: var(--text); border-color: var(--line); }
+  .km { margin-top: 22px; }
+  .km-grp { padding: 14px 0; border-top: 1px solid var(--line-soft); }
+  .km-grp:first-child { border-top: none; padding-top: 4px; }
+  .km-h { font-family: "Barlow Semi Condensed", sans-serif; text-transform: uppercase; font-size: 10px; letter-spacing: 3px; color: var(--dim); font-weight: 600; margin: 0 0 10px; padding-left: 9px; position: relative; }
+  .km-h::before { content: ""; position: absolute; left: 0; top: 1px; bottom: 1px; width: 2px; border-radius: 1px; background: var(--accent); opacity: .55; }
+  .km-row { display: grid; grid-template-columns: 138px 86px 1fr; align-items: center; gap: 12px; padding: 4px 0; }
+  .km-keys { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+  .km-lbl { font-family: "Barlow Semi Condensed", sans-serif; text-transform: uppercase; font-size: 11px; letter-spacing: 1.5px; color: var(--text); font-weight: 600; }
+  .km-note { font-size: 11px; color: var(--dim); line-height: 1.4; }
+  .km kbd { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px; font-family: "JetBrains Mono", monospace; font-size: 10px; font-weight: 500; color: var(--text); background: #0c0d10; border: 1px solid var(--line); border-radius: 4px; box-shadow: inset 0 -1px 0 rgba(0,0,0,0.5); }
+  .km kbd.km-wide { min-width: 56px; }
+  .km kbd.km-mod { color: var(--dim); letter-spacing: .5px; }
+  .km kbd.km-q { color: var(--accent); border-color: rgba(255,216,58,0.32); background: rgba(255,216,58,0.05); }
+  .km-plus, .km-tap { font-size: 10px; color: var(--dimmer); font-family: "JetBrains Mono", monospace; }
+  .km-tap { font-style: normal; padding: 0 1px; }
+  .km-foot { margin: 16px 0 0; padding-top: 14px; border-top: 1px solid var(--line-soft); font-size: 10.5px; color: var(--dimmer); letter-spacing: .3px; line-height: 1.5; }
+  .intro-close { display: block; margin: 18px auto 0; padding: 12px 32px; background: linear-gradient(180deg, var(--accent), var(--A-deep)); color: #0a0b0d; border: none; border-radius: 7px; font-family: "Barlow Semi Condensed", sans-serif; font-size: 13px; font-weight: 700; letter-spacing: 2px; cursor: pointer; text-transform: uppercase; }
   .intro-close:hover { filter: brightness(1.08); }
+  @media (max-width: 480px) { .km-row { grid-template-columns: 120px 1fr; } .km-note { grid-column: 1 / -1; padding-left: 2px; } }
+  .help-pin { width: 30px; height: 30px; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; background: var(--metal-2); border: 1px solid var(--line); border-radius: 8px; color: var(--dim); font-family: "JetBrains Mono", monospace; font-size: 13px; font-weight: 700; cursor: pointer; transition: color .14s ease, border-color .14s ease, box-shadow .14s ease; }
+  .help-pin:hover { color: var(--accent); border-color: var(--accent); box-shadow: 0 0 0 1px rgba(255,216,58,0.18); }
+  .help-pin:active { filter: brightness(0.94); }
+  @media (max-width: 560px) { .help-pin { width: 28px; height: 28px; } }
 
   /* ===== deck tabs (narrow only) ===== */
   .deck-tabs { display: none; }
@@ -511,6 +534,7 @@
     <div class="brand"><span class="bdot"></span>Vinyl Scratch Engine <small>STUDIO</small></div>
     <div class="header-right">
       <div class="sys">ENGINE <b id="engineMode">—</b> · DUAL DECK</div>
+      <button class="help-pin" id="helpOpen" title="조작법 (단축키 ?)" aria-label="조작법 열기">?</button>
       <button class="set-gear" data-set="mixer" title="엔진 설정 — 크로스페이더 커브 · Anti-Alias">⚙</button>
     </div>
   </header>
@@ -753,20 +777,41 @@
 </div>
 
 <!-- 인트로 모달 (최초 렌더링 시 1회 표시) -->
-<div class="intro-overlay" id="introOverlay">
+<div class="intro-overlay" id="introOverlay" role="dialog" aria-modal="true" aria-labelledby="introTitle">
   <div class="intro-modal">
-    <h1 class="intro-title">Vinyl Scratch Engine</h1>
-    <p class="intro-sub">v0.3 · battle layout</p>
-    <div class="intro-help">
-      <strong style="color:var(--text);">조작법</strong><br>
-      • <kbd>Platter 드래그</kbd> — 스크래치 · <kbd>손 놓기</kbd> 관성 복귀<br>
-      • <kbd>Pitch</kbd> 속도 ±50% · <kbd>BPM</kbd> 원본 입력 · <kbd>Stretch</kbd> 음정유지 템포변경(Apply)<br>
-      • <kbd>Crossfader</kbd> A↔B 믹싱 · 커브 Smooth/Linear/Sharp<br>
-      • <kbd>Q W E</kbd> 크로스페이더 A·중앙·B · 홀딩+단타로 크랩 (예: Q홀드+E연타)<br>
-      • <kbd>R</kbd> 양 덱 재생/정지 토글 · <kbd>Space</kbd> 홀딩 = 1/8 롤(떼면 시간 복구)<br>
-      • <kbd>A S D F</kbd> / <kbd>Z X C V</kbd> 덱 A/B 핫큐 (빈칸=저장·채움=점프·Shift=삭제)<br>
-      • 상단 <kbd>웨이브폼</kbd> 색 = 주파수 대역(Low/Mid/High)으로 비트매칭
+    <div class="intro-head">
+      <div>
+        <h1 class="intro-title" id="introTitle">Vinyl Scratch Engine</h1>
+        <p class="intro-sub">v0.3 · battle layout · 키맵</p>
+      </div>
+      <button class="intro-x" id="introX" title="닫기 (Esc)" aria-label="닫기">✕</button>
     </div>
+    <div class="km">
+      <section class="km-grp">
+        <h2 class="km-h">믹스</h2>
+        <div class="km-row"><span class="km-keys"><kbd>Q</kbd><kbd>W</kbd><kbd>E</kbd></span><span class="km-lbl">크로스페이더</span><span class="km-note">A · 중앙 · B로 이동</span></div>
+        <div class="km-row"><span class="km-keys"><kbd>Q</kbd><span class="km-plus">홀드 +</span><kbd>E</kbd><span class="km-tap">연타</span></span><span class="km-lbl">크랩</span><span class="km-note">한 점 잡고 다른 점 연타</span></div>
+        <div class="km-row"><span class="km-keys"><kbd class="km-mod">Shift</kbd><span class="km-plus">+</span><kbd>Q</kbd><kbd>W</kbd><kbd>E</kbd></span><span class="km-lbl">래치</span><span class="km-note">컷 고정 — 다시 누르면 해제</span></div>
+      </section>
+      <section class="km-grp">
+        <h2 class="km-h">핫큐</h2>
+        <div class="km-row"><span class="km-keys"><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><kbd>F</kbd></span><span class="km-lbl">덱 A</span><span class="km-note">빈칸=저장 · 채움=점프</span></div>
+        <div class="km-row"><span class="km-keys"><kbd>Z</kbd><kbd>X</kbd><kbd>C</kbd><kbd>V</kbd></span><span class="km-lbl">덱 B</span><span class="km-note">빈칸=저장 · 채움=점프</span></div>
+        <div class="km-row"><span class="km-keys"><kbd class="km-mod">Shift</kbd><span class="km-plus">+</span><span class="km-tap">위 키</span></span><span class="km-lbl">삭제</span><span class="km-note">저장된 큐 비우기</span></div>
+      </section>
+      <section class="km-grp">
+        <h2 class="km-h">롤</h2>
+        <div class="km-row"><span class="km-keys"><kbd class="km-wide">Space</kbd></span><span class="km-lbl">양 덱 롤</span><span class="km-note">홀드 = 반복 · 떼면 시간 복구</span></div>
+        <div class="km-row"><span class="km-keys"><span class="km-tap">패드</span></span><span class="km-lbl">박자 선택</span><span class="km-note">1/8 · 1/4 · 1/2 · 1 · 2 · 4</span></div>
+      </section>
+      <section class="km-grp">
+        <h2 class="km-h">플래터 · 재생</h2>
+        <div class="km-row"><span class="km-keys"><span class="km-tap">드래그</span></span><span class="km-lbl">스크래치</span><span class="km-note">잡고 멈추면 정지 · 놓으면 관성</span></div>
+        <div class="km-row"><span class="km-keys"><kbd>R</kbd></span><span class="km-lbl">재생 / 정지</span><span class="km-note">양 덱 토글</span></div>
+        <div class="km-row"><span class="km-keys"><kbd class="km-q">?</kbd></span><span class="km-lbl">이 화면</span><span class="km-note">언제든 다시 열기</span></div>
+      </section>
+    </div>
+    <p class="km-foot">웨이브폼 색 = 주파수 대역(Low · Mid · High) — 비트매칭 참고</p>
     <button class="intro-close" id="introClose">시작하기 →</button>
   </div>
 </div>
@@ -2605,14 +2650,26 @@ window.addEventListener('resize', () => {
   [deckA, deckB].forEach(d => { if (d.waveData) { sizeCanvas(d); drawWaveformCache(d); } });
 });
 
-// 인트로 모달 — 한 번 본 뒤로는 표시 안 함(localStorage 기억)
+// 인트로/도움말 모달 — 최초 1회 자동 표시, 이후 ? 핀/키로 재호출 (UX tournament: 상시 도움말)
 const introOverlay = document.getElementById('introOverlay');
-const introClose = document.getElementById('introClose');
+const introClose = document.getElementById('introClose');   // 시작하기 → (최초 CTA)
+const introX = document.getElementById('introX');            // ✕ 닫기
+const helpOpen = document.getElementById('helpOpen');        // 헤더 ? 핀
+function openHelp() { if (introOverlay) introOverlay.classList.remove('hidden'); }
+function closeHelp() { if (introOverlay) introOverlay.classList.add('hidden'); try { localStorage.setItem('vse_introSeen', '1'); } catch (e) {} }
 try { if (introOverlay && localStorage.getItem('vse_introSeen')) introOverlay.classList.add('hidden'); } catch (e) {}
-if (introClose) introClose.addEventListener('click', () => {
-  if (introOverlay) introOverlay.classList.add('hidden');
-  try { localStorage.setItem('vse_introSeen', '1'); } catch (e) {}
-});
+if (introClose) introClose.addEventListener('click', closeHelp);
+if (introX) introX.addEventListener('click', closeHelp);
+if (helpOpen) helpOpen.addEventListener('click', openHelp);
+// "?" (Shift+/) 또는 Slash로 재호출, Esc로 닫기 — capture 단계(메인 keydown이 모달 중 early-return하므로)
+window.addEventListener('keydown', (e) => {
+  const tag = e.target && e.target.tagName;
+  if (tag === 'TEXTAREA' || (tag === 'INPUT' && e.target.type !== 'range')) return;
+  const open = introOverlay && !introOverlay.classList.contains('hidden');
+  if (e.code === 'Escape' && open) { e.preventDefault(); closeHelp(); return; }
+  if ((e.code === 'Slash' || e.key === '?') && !open) { e.preventDefault(); openHelp(); }
+}, true);
+if (introOverlay) introOverlay.addEventListener('mousedown', (e) => { if (e.target === introOverlay) closeHelp(); });
 animate();
 
 // ============================================================
