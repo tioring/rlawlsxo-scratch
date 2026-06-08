@@ -688,6 +688,7 @@ class ScratchProcessor extends AudioWorkletProcessor {
           this.gain = 0;
           this.targetGain = 0;
           this.pendingSeek = -1;
+          this.rollOn = false; this.rollStart = -1; this.rollEnd = -1; this.rollShadow = 0;  // 버퍼 교체 시 stale roll 구간 정지(reload-while-roll 방지)
           break;
         case 'play':
           this.playing = d.value;
@@ -773,6 +774,7 @@ class ScratchProcessor extends AudioWorkletProcessor {
     for (let i = 0; i < numSamples; i++) {
       // 속도 smoothing (1-pole IIR — 매 샘플마다 적용)
       this.velocity = this.velocity * smooth + this.targetVelocity * (1 - smooth);
+      if (this.targetVelocity === 0 && this.velocity < 1e-6 && this.velocity > -1e-6) this.velocity = 0;  // denormal 방지
       const speed = this.velocity < 0 ? -this.velocity : this.velocity;
 
       // declick 게인 엔벨로프 (재생/정지/점프 시 振幅 불연속 → 클릭 방지)
@@ -936,6 +938,7 @@ function createScriptProcessorFallback(ctx) {
         s.gain = 0;
         s.targetGain = 0;
         s.pendingSeek = -1;
+        s.rollOn = false; s.rollStart = -1; s.rollEnd = -1; s.rollShadow = 0;  // worklet과 동일: stale roll 구간 정지
         break;
       case 'play':
         s.playing = data.value;
@@ -1015,6 +1018,7 @@ function createScriptProcessorFallback(ctx) {
 
     for (let i = 0; i < numSamples; i++) {
       s.velocity = s.velocity * smooth + s.targetVelocity * (1 - smooth);
+      if (s.targetVelocity === 0 && s.velocity < 1e-6 && s.velocity > -1e-6) s.velocity = 0;  // denormal 방지
       const speed = s.velocity < 0 ? -s.velocity : s.velocity;
 
       // declick 게인 엔벨로프
