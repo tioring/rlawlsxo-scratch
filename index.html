@@ -301,6 +301,7 @@
   }
   .crossfader-row input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 20px; height: 30px; border-radius: 5px; background: linear-gradient(180deg,#eef1f5,#b6bcc6); border: 1px solid #05070a; cursor: ew-resize; box-shadow: 0 3px 7px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.8); }
   .crossfader-row input[type=range]::-moz-range-thumb { width: 20px; height: 30px; border-radius: 5px; background: linear-gradient(180deg,#eef1f5,#b6bcc6); border: 1px solid #05070a; cursor: ew-resize; box-shadow: 0 3px 7px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.8); }
+  #crossfader.latched { box-shadow: 0 0 0 2px #ff5e3a, 0 0 14px rgba(255,94,58,0.6); border-radius: 5px; }   /* 래치 컷 활성 표시 (Phase 4) */
   .cf-label { text-align: center; font-size: 10px; color: var(--dim); letter-spacing: 1px; margin-top: 8px; text-transform: uppercase; }
   .cf-keys { display: flex; justify-content: space-between; padding: 0 14px; margin-top: 8px; }
   .cf-keys span { font-family: "JetBrains Mono", monospace; font-size: 9px; color: var(--dimmer); border: 1px solid var(--line-soft); border-radius: 4px; padding: 2px 8px; background: #0a0b0d; }
@@ -1248,6 +1249,77 @@ function setParam(param, value, opts) {
 }
 
 // ============================================================
+// CrossfaderController — 래치 컷 (Shift+Q/W/E) (PLAN §3.2 / Phase 4)
+//   normal: 기존 cfKeyStack(QWER) 로직 유지. latched: 컨트롤러가 게인을 setParam cut으로 소유 (rAF 추종 스킵, DSP-3)
+// ============================================================
+const PULSE_SEC = 0.09;   // Q/W 펄스 컷 폭 — > 2·(CUT_MS+PARAM_LA) 보장 (DSP-4/C12)
+const cfCtl = {
+  mode: 'normal',         // 'normal' | 'latched'
+  anchor: 0.5,            // 래치 시점 crossfade 스칼라값 (C16 — geometry 아님)
+  latchKey: null,
+  cutRail() { return this.anchor <= 0.5 ? 1 : 0; },   // 앵커-우세 덱을 죽이는 반대 극
+  // 양 덱 게인을 cfGains(value)로 declick 램프 (DSP-2: 하드코딩 0/1 금지 → 활성 커브 반영)
+  _rampTo(value) {
+    if (!audioCtx) return;
+    const g = cfGains(value), t = audioCtx.currentTime + PARAM_LA;
+    [deckA.gainNode, deckB.gainNode].forEach((gn, i) => {
+      if (!gn) return;
+      gn.gain.cancelScheduledValues(audioCtx.currentTime);
+      gn.gain.setValueAtTime(gn.gain.value, t);
+      gn.gain.linearRampToValueAtTime(g[i], t + CUT_MS);
+    });
+  },
+  // 펄스: cut → 앵커, 전 구간 audio clock 스케줄 (setTimeout 지터 없음, DSP-4)
+  _pulse() {
+    if (!audioCtx) return;
+    const gc = cfGains(this.cutRail()), ga = cfGains(this.anchor), t = audioCtx.currentTime + PARAM_LA;
+    [deckA.gainNode, deckB.gainNode].forEach((gn, i) => {
+      if (!gn) return;
+      gn.gain.cancelScheduledValues(audioCtx.currentTime);
+      gn.gain.setValueAtTime(gn.gain.value, t);
+      gn.gain.linearRampToValueAtTime(gc[i], t + CUT_MS);
+      gn.gain.setValueAtTime(gc[i], t + PULSE_SEC);
+      gn.gain.linearRampToValueAtTime(ga[i], t + PULSE_SEC + CUT_MS);
+    });
+  },
+  onKey(code, shift, type) {       // true 반환 = 처리됨(라우터가 normal CF 로직 스킵)
+    if (!(code in CF_POINTS)) return false;
+    if (shift && type === 'down') {                          // Shift+Q/W/E = 래치 토글(같은 키 재탭=해제)
+      if (this.mode === 'latched' && this.latchKey === code) this.release();
+      else { this.mode = 'latched'; this.anchor = crossfade; this.latchKey = code; this._ui(); }
+      return true;
+    }
+    if (this.mode === 'latched') {
+      if (type === 'down') {
+        if (code === 'KeyQ' || code === 'KeyW') this._pulse();
+        else if (code === 'KeyE') this._rampTo(this.cutRail());   // E 긴컷 누름
+      } else if (code === 'KeyE') {
+        this._rampTo(this.anchor);                               // E 긴컷 해제 = 앵커 복귀
+      }
+      return true;
+    }
+    return false;                                            // normal → 라우터의 cfKeyStack 로직
+  },
+  release() {                                                // 래치 해제 → crossfade·게인 앵커 복귀
+    if (this.mode !== 'latched') return;
+    this.mode = 'normal'; this.latchKey = null;
+    crossfade = this.anchor; cfTarget = this.anchor;          // rAF stomp 방지: crossfade==cfTarget → 추종 블록 미발동(DSP-3)
+    crossfaderEl.value = crossfade;
+    this._rampTo(this.anchor);
+    this._ui();
+  },
+  forceNormal() {                                            // A3: 마우스 우선 — 슬라이더가 곧 게인을 잡으므로 램프 없이 모드만
+    this.mode = 'normal'; this.latchKey = null; this._ui();
+  },
+  reset() {                                                  // panic (blur/visibility, A1)
+    this.mode = 'normal'; this.latchKey = null;
+    this._rampTo(crossfade);                                  // 걸려있던 컷 해제
+    this._ui();
+  },
+  _ui() { if (typeof crossfaderEl !== 'undefined' && crossfaderEl) crossfaderEl.classList.toggle('latched', this.mode === 'latched'); },
+};
+
+// ============================================================
 // 유틸
 // ============================================================
 function formatTime(sec) {
@@ -2125,6 +2197,7 @@ function rollBoth(on) {
 // 크로스페이더
 const crossfaderEl = document.getElementById('crossfader');
 crossfaderEl.addEventListener('input', () => {
+  cfCtl.forceNormal();    // A3: 마우스 드래그 = 래치 해제 (마우스 우선)
   crossfade = parseFloat(crossfaderEl.value);
   cfTarget = crossfade;   // 마우스 조작이 우선 — 키 추종/홀딩 중단
   cfKeyStack = [];
@@ -2194,6 +2267,7 @@ function resetTransientInput() {
   spaceRollActive = false;
   cfKeyStack = [];
   cfTarget = crossfade;
+  cfCtl.reset();   // 래치/펄스 안전 해제 + 게인 복귀 (A1)
   [deckA, deckB].forEach(d => { while (d.rollHolders > 0) rollOff(d); });
   document.querySelectorAll('.rollpads .lp.rolling').forEach(b => b.classList.remove('rolling'));
 }
@@ -2210,6 +2284,7 @@ window.addEventListener('keydown', (e) => {
   if (tag === 'TEXTAREA' || (tag === 'INPUT' && e.target.type !== 'range')) return;
   if (e.code in CF_POINTS) {
     e.preventDefault();
+    if (cfCtl.onKey(e.code, e.shiftKey, 'down')) return;   // Shift+Q/W/E 래치 토글 · latched 컷 (Phase 4)
     if (!cfKeyStack.includes(e.code)) cfKeyStack.push(e.code);   // 새로 누른 키가 top = 단타 우선
     cfTarget = CF_POINTS[cfKeyStack[cfKeyStack.length - 1]];
   } else if (e.code in HOTCUE_KEYS) {
@@ -2228,6 +2303,7 @@ window.addEventListener('keydown', (e) => {
 // 크로스페이더 키 뗌 — 스택에서 빼고 남은 홀딩 앵커로 리턴 (크랩)
 window.addEventListener('keyup', (e) => {
   if (e.code in CF_POINTS) {
+    if (cfCtl.onKey(e.code, e.shiftKey, 'up')) return;   // latched E 긴컷 해제 등 (Phase 4)
     const i = cfKeyStack.indexOf(e.code);
     if (i >= 0) cfKeyStack.splice(i, 1);
     if (cfKeyStack.length) cfTarget = CF_POINTS[cfKeyStack[cfKeyStack.length - 1]];
@@ -2262,7 +2338,7 @@ function animate() {
   lastFrameTime = now;
 
   // 크로스페이더 키 추종: 거리 비례 속도(지수 ease) → 먼 포인트일수록 빠르게 휙
-  if (crossfade !== cfTarget) {
+  if (cfCtl.mode === 'normal' && crossfade !== cfTarget) {   // latched면 컨트롤러가 게인 소유 → 추종 스킵 (DSP-3)
     if (Math.abs(cfTarget - crossfade) > 0.0005) {
       crossfade += (cfTarget - crossfade) * (1 - Math.exp(-dt / CF_TAU));
     } else {
