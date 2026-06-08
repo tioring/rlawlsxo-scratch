@@ -1760,6 +1760,12 @@ function createDeck(id) {
   });
 
   // --- platter 인터랙션 ---
+  // 스크래치 idle 워치독: 잡은 채 멈추면(pointermove 미발생) 마지막 속도로 계속 도는 문제 →
+  // 50ms 내 새 velocity가 안 오면 velocity:0을 보내 정지. 두 스크래치 경로(platter/zoom) 공용.
+  const armIdleStop = () => {
+    clearTimeout(deck.idleTimer);
+    deck.idleTimer = setTimeout(() => { if (deck.node) deck.node.port.postMessage({ type: 'scratch-velocity', value: 0 }); }, 50);
+  };
   el.platter.addEventListener('pointerdown', (e) => {
     if (!deck.buffer) return;
     e.preventDefault();
@@ -1770,6 +1776,7 @@ function createDeck(id) {
     deck.lastAngle = Math.atan2(e.clientY - cy, e.clientX - cx);
     deck.lastTime = performance.now();
     deck.node.port.postMessage({ type: 'scratch-start' });
+    armIdleStop();   // 잡고 안 움직이면 정지
     if (e.pointerId !== undefined) el.platter.setPointerCapture(e.pointerId);
   });
   el.platter.addEventListener('contextmenu', e => e.preventDefault());
@@ -1795,15 +1802,18 @@ function createDeck(id) {
     const dt = (endTime - deck.lastTime) / 1000;
     if (dt > 0) {
       const angularVel = totalDAngle / dt;
-      const playbackVel = (angularVel / (2 * Math.PI)) * deck.sensitivity;  // 1바퀴/초 = sensitivity배
+      let playbackVel = (angularVel / (2 * Math.PI)) * deck.sensitivity;  // 1바퀴/초 = sensitivity배
+      if (playbackVel > 8) playbackVel = 8; else if (playbackVel < -8) playbackVel = -8;  // 빠른 플릭 sub-ms dt 스파이크 클램프
       deck.node.port.postMessage({ type: 'scratch-velocity', value: playbackVel });
-      deck.visualAngle += totalDAngle * 180 / Math.PI;
+      armIdleStop();
+      deck.visualAngle += totalDAngle * 180 / Math.PI;   // 시각은 실제 각도 1:1 (오디오만 클램프)
     }
     deck.lastTime = endTime;
   }
   function onUp() {
     if (!deck.dragging) return;
     deck.dragging = false;
+    clearTimeout(deck.idleTimer);
     el.platter.classList.remove('scratching');
     deck.node.port.postMessage({ type: 'scratch-end', smoothing: VINYL_SMOOTHING });
   }
@@ -1857,6 +1867,7 @@ function createDeck(id) {
       zMoved = 0;
       el.zoom.classList.add('scrubbing');
       deck.node.port.postMessage({ type: 'scratch-start' });
+      armIdleStop();
       if (e.pointerId !== undefined) el.zoom.setPointerCapture(e.pointerId);
     });
     el.zoom.addEventListener('pointermove', (e) => {
@@ -1874,14 +1885,17 @@ function createDeck(id) {
       }
       const dt = (endT - zLastT) / 1000;
       if (dt > 0) {
-        const vel = advanceSec / dt;   // audio초/실초 = 재생배속
+        let vel = advanceSec / dt;   // audio초/실초 = 재생배속
+        if (vel > 8) vel = 8; else if (vel < -8) vel = -8;
         deck.node.port.postMessage({ type: 'scratch-velocity', value: vel });
+        armIdleStop();
       }
       zLastT = endT;
     });
     function zUp(e) {
       if (!zDrag) return;
       zDrag = false;
+      clearTimeout(deck.idleTimer);
       el.zoom.classList.remove('scrubbing');
       // 거의 움직이지 않은 짧은 탭 → 그 지점으로 점프
       if (zMoved < 5 && (performance.now() - zDownT) < 250 && deck.buffer) {
