@@ -258,7 +258,6 @@
   .lp[data-deck="A"].active { background: var(--accent); color: #0a0b0d; border-color: var(--accent); }
   .lp[data-deck="B"].active { background: var(--accentB); color: #0a0b0d; border-color: var(--accentB); }
   .lp.rolling { filter: brightness(1.2); box-shadow: 0 0 12px rgba(255,255,255,0.3); }
-  .loop-region { position: absolute; top: 0; height: 100%; background: rgba(255,255,255,0.18); pointer-events: none; display: none; }
 
   /* ===== mixer center ===== */
   .mixer-center {
@@ -516,8 +515,8 @@
         </div>
       </div>
       <div class="mix-row">
-        <div class="progress" id="progress_A"><div class="progress-bar" id="progressBar_A"></div><div class="loop-region" id="loopRegion_A"></div><div class="hc-markers" id="hcMarkers_A"></div></div>
-        <div class="progress" id="progress_B"><div class="progress-bar" id="progressBar_B"></div><div class="loop-region" id="loopRegion_B"></div><div class="hc-markers" id="hcMarkers_B"></div></div>
+        <div class="progress" id="progress_A"><div class="progress-bar" id="progressBar_A"></div><div class="hc-markers" id="hcMarkers_A"></div></div>
+        <div class="progress" id="progress_B"><div class="progress-bar" id="progressBar_B"></div><div class="hc-markers" id="hcMarkers_B"></div></div>
       </div>
       <div class="faders">
         <div class="vfader"><input type="range" id="vol_A" class="vrange" min="0" max="1.2" step="0.01" value="1"></div>
@@ -659,9 +658,6 @@ class ScratchProcessor extends AudioWorkletProcessor {
     this.scratching = false;
     this.direction = 1;          // 1 또는 -1 (reverse)
     this.rate = 1;               // 피치/속도 배율 (1.0 = 원속)
-    this.loopStart = -1;
-    this.loopEnd = -1;
-    this.loopOn = false;
     this.rollOn = false;
     this.rollStart = -1;
     this.rollEnd = -1;
@@ -737,10 +733,6 @@ class ScratchProcessor extends AudioWorkletProcessor {
           break;
         case 'aa':
           this.aaEnabled = d.value;
-          break;
-        case 'loop':
-          if (d.on) { this.loopStart = d.start; this.loopEnd = d.end; this.loopOn = true; }
-          else { this.loopOn = false; }
           break;
         case 'roll':
           if (d.on) {
@@ -859,10 +851,6 @@ class ScratchProcessor extends AudioWorkletProcessor {
         const rl = this.rollEnd - this.rollStart;
         while (this.position >= this.rollEnd) this.position -= rl;
         while (this.position < this.rollStart) this.position += rl;
-      } else if (this.loopOn && this.loopEnd > this.loopStart) {
-        const loopLen = this.loopEnd - this.loopStart;
-        while (this.position >= this.loopEnd) this.position -= loopLen;
-        while (this.position < this.loopStart) this.position += loopLen;
       }
 
       // 경계 처리
@@ -917,9 +905,6 @@ function createScriptProcessorFallback(ctx) {
     scratching: false,
     direction: 1,
     rate: 1,
-    loopStart: -1,
-    loopEnd: -1,
-    loopOn: false,
     rollOn: false,
     rollStart: -1,
     rollEnd: -1,
@@ -990,10 +975,6 @@ function createScriptProcessorFallback(ctx) {
         break;
       case 'aa':
         s.aaEnabled = data.value;
-        break;
-      case 'loop':
-        if (data.on) { s.loopStart = data.start; s.loopEnd = data.end; s.loopOn = true; }
-        else { s.loopOn = false; }
         break;
       case 'roll':
         if (data.on) {
@@ -1110,10 +1091,6 @@ function createScriptProcessorFallback(ctx) {
         const rl = s.rollEnd - s.rollStart;
         while (s.position >= s.rollEnd) s.position -= rl;
         while (s.position < s.rollStart) s.position += rl;
-      } else if (s.loopOn && s.loopEnd > s.loopStart) {
-        const loopLen = s.loopEnd - s.loopStart;
-        while (s.position >= s.loopEnd) s.position -= loopLen;
-        while (s.position < s.loopStart) s.position += loopLen;
       }
 
       if (s.position < 0) {
@@ -1367,44 +1344,6 @@ function timeStretch(buffer, tempoRatio) {
 }
 
 // ============================================================
-// 루프 (In/Out 수동 · 1·2·4 beat 자동 · Exit)
-// ============================================================
-function handleLoop(deck, act, beats) {
-  if (!deck.buffer) return;
-  if (act === 'in') {
-    deck.loopStart = deck.curPos;
-  } else if (act === 'out') {
-    if (deck.loopStart >= 0 && deck.curPos > deck.loopStart) {
-      deck.loopEnd = deck.curPos;
-      deck.loopOn = true;
-      deck.node.port.postMessage({ type: 'loop', start: deck.loopStart, end: deck.loopEnd, on: true });
-    }
-  } else if (act === 'beat') {
-    if (!deck.baseBpm) return;                       // BPM 없으면 비트 루프 불가
-    const spb = deck.buffer.sampleRate * 60 / deck.baseBpm;
-    deck.loopStart = deck.curPos;
-    deck.loopEnd = Math.min(deck.curPos + beats * spb, deck.buffer.length - 1);
-    deck.loopOn = true;
-    deck.node.port.postMessage({ type: 'loop', start: deck.loopStart, end: deck.loopEnd, on: true });
-  } else if (act === 'exit') {
-    deck.loopOn = false;
-    deck.node.port.postMessage({ type: 'loop', on: false });
-  }
-  updateLoopUI(deck);
-}
-function updateLoopUI(deck) {
-  if (deck.el.loopExit) deck.el.loopExit.classList.toggle('active', deck.loopOn);
-  const r = deck.el.loopRegion;
-  if (deck.loopOn && deck.buffer) {
-    r.style.display = 'block';
-    r.style.left = (deck.loopStart / deck.buffer.length) * 100 + '%';
-    r.style.width = ((deck.loopEnd - deck.loopStart) / deck.buffer.length) * 100 + '%';
-  } else {
-    r.style.display = 'none';
-  }
-}
-
-// ============================================================
 // Visual beatmatching — 3밴드(Low/Mid/High) 컬러 웨이브폼
 // ============================================================
 function analyzeWaveform(buffer, bins) {
@@ -1573,8 +1512,6 @@ function createDeck(id) {
     progressBar: document.getElementById('progressBar_' + id),
     hcMarkers:   document.getElementById('hcMarkers_' + id),
     hcPads:      [0, 1, 2, 3].map(i => document.querySelector('.hc[data-deck="' + id + '"][data-slot="' + i + '"]')),
-    loopRegion:  document.getElementById('loopRegion_' + id),
-    loopExit:    document.querySelector('.lp[data-deck="' + id + '"][data-act="exit"]'),
     posVal:      document.getElementById('posVal_' + id),
     speedVal:    document.getElementById('speedVal_' + id),
     canvas:      document.getElementById('wave_' + id),
@@ -1597,9 +1534,6 @@ function createDeck(id) {
     originalBuffer: null,
     originalBpm: null,
     hotcues: [null, null, null, null],
-    loopStart: -1,
-    loopEnd: -1,
-    loopOn: false,
     curPos: 0,
     curVel: 0,
     waveData: null,
@@ -1695,9 +1629,6 @@ function createDeck(id) {
       el.playBtn.textContent = '▶ Play';
       deck.hotcues = [null, null, null, null];
       updateHotcueUI(deck);
-      deck.loopOn = false; deck.loopStart = -1; deck.loopEnd = -1;
-      deck.node.port.postMessage({ type: 'loop', on: false });
-      updateLoopUI(deck);
       buildWaveform(deck);
     } catch (err) {
       console.error('loadFile error:', err);
@@ -1759,8 +1690,6 @@ function createDeck(id) {
     deck.isPlaying = false;
     el.playBtn.textContent = '▶ Play';
     deck.hotcues = [null, null, null, null]; updateHotcueUI(deck);
-    deck.loopOn = false; deck.loopStart = -1; deck.loopEnd = -1;
-    deck.node.port.postMessage({ type: 'loop', on: false }); updateLoopUI(deck);
     buildWaveform(deck);
   }
   el.stretchApply.addEventListener('click', async () => {
