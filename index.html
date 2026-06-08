@@ -1615,6 +1615,11 @@ function createDeck(id) {
 
   async function loadFile(file) {
     const myLoad = deck.loadSeq = (deck.loadSeq || 0) + 1;   // 동시 로드 경합 토큰: 늦게 끝난 옛 로드가 새 로드를 덮지 않게
+    const MAX_FILE_BYTES = 150 * 1024 * 1024;   // 150MB 가드: 대용량 영상은 decode 시 전체 PCM이 상주해 탭 OOM → 사전 차단(디코드는 오디오 트랙만 추출)
+    if (file.size > MAX_FILE_BYTES) {
+      el.fileLabel.innerHTML = `<span style="color:#ff5e3a;">파일이 너무 큼</span> — <strong>${escHtml(file.name)}</strong> (${(file.size / 1048576 | 0)}MB). 최대 ${MAX_FILE_BYTES / 1048576 | 0}MB. <span class="hint">긴 영상은 오디오만 추출해 올려주세요.</span>`;
+      return;
+    }
     try {
       await ensureNode();
       if (myLoad !== deck.loadSeq) return;
@@ -1638,6 +1643,11 @@ function createDeck(id) {
         el.playBtn.textContent = '▶ Play';
         el.playBtn.disabled = true; el.cueBtn.disabled = true; el.reverseBtn.disabled = true;
         el.fileZone.classList.remove('has-file');
+        deck.waveData = null; deck.zoomData = null; deck.waveCache = null;   // 옛 트랙 파형 잔존 제거(빈 덱 UI인데 이전 파형만 남던 회귀)
+        deck.baseBpm = null; deck.originalBpm = null; deck.curPos = 0;
+        el.bpmBase.value = ''; el.stretchBpm.value = ''; updateBpm();
+        if (el.canvas) el.canvas.getContext('2d').clearRect(0, 0, el.canvas.width, el.canvas.height);
+        if (el.zoom) el.zoom.getContext('2d').clearRect(0, 0, el.zoom.width, el.zoom.height);
         return;
       }
 
@@ -1669,6 +1679,7 @@ function createDeck(id) {
       deck.curPos = 0;
       deck.isPlaying = false;
       el.playBtn.textContent = '▶ Play';
+      deck.node.port.postMessage({ type: 'play', value: false });   // 엔진 playing 플래그를 UI(정지)와 일치 — 재생 중 로드 시 클릭/잔여재생 방지
       deck.hotcues = [null, null, null, null];
       deck.rollHolders = 0;          // 로드 시 roll 홀더 카운트 리셋(이전 트랙 잔존 방지)
       updateHotcueUI(deck);
@@ -1689,6 +1700,7 @@ function createDeck(id) {
   }
   function cue() {
     if (!deck.buffer) return;
+    ensureRunning();
     deck.node.port.postMessage({ type: 'cue' });
   }
   function toggleReverse() {
@@ -1715,6 +1727,7 @@ function createDeck(id) {
   el.bpmBase.addEventListener('input', () => {
     const v = parseFloat(el.bpmBase.value);
     deck.baseBpm = (isFinite(v) && v > 0) ? v : null;
+    if (deck.baseBpm && !deck.originalBpm) deck.originalBpm = deck.baseBpm;   // 자동검출 실패 시 수동 BPM으로 타임스트레치 기준 확보
     updateBpm();
   });
 
@@ -1742,6 +1755,7 @@ function createDeck(id) {
     const channels = [];
     for (let ch = 0; ch < buf.numberOfChannels; ch++) channels.push(buf.getChannelData(ch).slice());
     deck.node.port.postMessage({ type: 'load', channels }, channels.map(c => c.buffer));
+    deck.node.port.postMessage({ type: 'play', value: false });   // 엔진 playing 플래그를 UI와 일치 — 재생 중 Apply/Reset 시 클릭/DC 방지
     deck.isPlaying = false;
     el.playBtn.textContent = '▶ Play';
     if (snap) {
@@ -1757,7 +1771,11 @@ function createDeck(id) {
     buildWaveform(deck);
   }
   el.stretchApply.addEventListener('click', async () => {
-    if (!deck.originalBuffer || !deck.originalBpm) return;
+    if (!deck.originalBuffer) return;
+    if (!deck.originalBpm) {   // 자동검출 실패 트랙: 침묵 no-op 대신 안내 (BPM 입력하면 originalBpm 확보돼 Apply 가능)
+      el.fileLabel.innerHTML = '<span style="color:#ff5e3a;">BPM 필요</span> — 자동검출 실패. <span class="hint">BPM 칸에 원본 템포를 입력한 뒤 Apply 하세요.</span>';
+      return;
+    }
     const target = parseFloat(el.stretchBpm.value);
     if (!isFinite(target) || target <= 0) return;
     if (typeof SoundTouch === 'undefined' || typeof SimpleFilter === 'undefined' || typeof WebAudioBufferSource === 'undefined') {
@@ -1796,6 +1814,7 @@ function createDeck(id) {
   };
   el.platter.addEventListener('pointerdown', (e) => {
     if (!deck.buffer) return;
+    ensureRunning();
     e.preventDefault();
     deck.dragging = true;
     el.platter.classList.add('scratching');
@@ -1811,6 +1830,7 @@ function createDeck(id) {
 
   function onMove(e) {
     if (!deck.dragging) return;
+    if (e.buttons === 0) { onUp(); return; }   // capture 분실 후 button-less 이동 = release 처리(latch 방지)
     const rect = el.platter.getBoundingClientRect();
     const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
     const events = (typeof e.getCoalescedEvents === 'function') ? e.getCoalescedEvents() : [e];
@@ -1870,12 +1890,14 @@ function createDeck(id) {
   el.reverseBtn.addEventListener('click', toggleReverse);
   el.progress.addEventListener('click', (e) => {
     if (!deck.buffer) return;
+    ensureRunning();
     const rect = e.currentTarget.getBoundingClientRect();
     const ratio = (e.clientX - rect.left) / rect.width;
     deck.node.port.postMessage({ type: 'seek', value: ratio * deck.buffer.length });
   });
   if (el.canvas) el.canvas.addEventListener('click', (e) => {
     if (!deck.buffer) return;
+    ensureRunning();
     const rect = el.canvas.getBoundingClientRect();
     const ratio = (e.clientX - rect.left) / rect.width;
     deck.node.port.postMessage({ type: 'seek', value: ratio * deck.buffer.length });
@@ -1888,6 +1910,7 @@ function createDeck(id) {
     const zSecPerPx = () => ZOOM_WINDOW_SEC / Math.max(1, el.zoom.getBoundingClientRect().height);
     el.zoom.addEventListener('pointerdown', (e) => {
       if (!deck.buffer) return;
+      ensureRunning();
       e.preventDefault();
       zDrag = true;
       zLastY = e.clientY; zStartY = e.clientY;
@@ -2015,11 +2038,14 @@ function initEqKnob(knob) {
   });
   knob.addEventListener('pointermove', (e) => {
     if (!dragging) return;
+    if (e.buttons === 0) { dragging = false; return; }   // 버튼 없는 이동 = capture 분실 후 latch → 해제
     commit(startV + (startY - e.clientY) / 220 * (max - min));
   });
   const end = () => { dragging = false; };
   knob.addEventListener('pointerup', end);
   knob.addEventListener('pointercancel', end);
+  knob.addEventListener('lostpointercapture', end);
+  knob.addEventListener('contextmenu', e => e.preventDefault());
   knob.addEventListener('dblclick', () => commit(0));
   knob.addEventListener('wheel', (e) => { e.preventDefault(); commit((parseFloat(input.value) || 0) + (e.deltaY < 0 ? step : -step)); }, { passive: false });
   render();
@@ -2048,6 +2074,7 @@ function setActiveDivision(deck, div) {
 }
 function rollOn(deck, division) {
   if (!deck.buffer || !deck.node) return;
+  ensureRunning();
   deck.rollHolders++;
   if (deck.rollHolders === 1) {                              // 첫 홀더일 때만 발동
     const bpm = deck.baseBpm || 120;
@@ -2109,6 +2136,8 @@ document.querySelectorAll('.rollpads .lp').forEach(btn => {
   };
   btn.addEventListener('pointerup', release);
   btn.addEventListener('pointercancel', release);
+  btn.addEventListener('lostpointercapture', release);   // OS/우클릭 등으로 capture 분실 시에도 roll 해제(무한 roll 방지)
+  btn.addEventListener('contextmenu', e => e.preventDefault());
 });
 
 // Roll 대상(반복할 구간: 뒤/앞) 토글 — 믹서 설정
