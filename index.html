@@ -180,6 +180,33 @@
   .phud-roll b { font-family: "JetBrains Mono", monospace; font-weight: 700; }
   .platter-wrap[data-roll="1"] .phud-roll { opacity: 1; transform: translate(100%, -50%) scale(1); }
 
+  /* ===== 모드 RIM PLATE — 플래터 림의 VINYL/정밀 토글 (UX tournament winner) ===== */
+  .mode-plate { position: absolute; left: 50%; bottom: -11px; transform: translateX(-50%); z-index: 4; display: grid; grid-template-columns: 1fr 1fr; align-items: center; width: 138px; height: 26px; padding: 0; font-family: "Barlow Semi Condensed", sans-serif; letter-spacing: 2px; text-transform: uppercase; font-size: 10px; font-weight: 700; color: var(--dimmer); background: linear-gradient(180deg, #1b1e23 0%, #0c0d10 100%); border: 1px solid var(--line); border-radius: 13px; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.05), inset 0 0 0 1px rgba(0,0,0,0.4); -webkit-tap-highlight-color: transparent; transition: border-color .18s ease, box-shadow .26s ease, color .18s ease; overflow: hidden; will-change: box-shadow; }
+  .mode-plate:hover { border-color: var(--accent); color: var(--text); }
+  .deck-side[data-deck="B"] .mode-plate:hover { border-color: var(--accentB); }
+  .mode-plate:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(255,216,58,0.5), 0 4px 12px rgba(0,0,0,0.55); }
+  .deck-side[data-deck="B"] .mode-plate:focus-visible { border-color: var(--accentB); box-shadow: 0 0 0 2px rgba(46,155,255,0.5), 0 4px 12px rgba(0,0,0,0.55); }
+  .mp-cell { position: relative; z-index: 2; text-align: center; line-height: 26px; transition: color .2s ease, opacity .2s ease; pointer-events: none; }
+  .mp-vinyl { padding-left: 2px; } .mp-prec { padding-right: 2px; }
+  .mp-thumb { position: absolute; z-index: 1; top: 2px; left: 2px; width: calc(50% - 3px); height: calc(100% - 4px); border-radius: 11px; pointer-events: none; background: linear-gradient(180deg, rgba(255,216,58,0.22), rgba(232,96,75,0.14)); box-shadow: inset 0 0 0 1px rgba(255,216,58,0.45), 0 0 10px rgba(255,216,58,0.18); transform: translateX(0); transition: transform .2s cubic-bezier(.34,1.36,.64,1), box-shadow .2s ease, background .2s ease; will-change: transform; }
+  .deck-side[data-deck="B"] .mp-thumb { background: linear-gradient(180deg, rgba(46,155,255,0.24), rgba(21,101,184,0.14)); box-shadow: inset 0 0 0 1px rgba(46,155,255,0.5), 0 0 10px rgba(46,155,255,0.2); }
+  .mode-plate[data-mode="vinyl"] .mp-vinyl { color: var(--accent); text-shadow: 0 0 8px rgba(255,216,58,0.4); }
+  .mode-plate[data-mode="vinyl"] .mp-prec { color: var(--dimmer); }
+  .deck-side[data-deck="B"] .mode-plate[data-mode="vinyl"] .mp-vinyl { color: var(--accentB); text-shadow: 0 0 8px rgba(46,155,255,0.45); }
+  .mode-plate[data-mode="precision"] .mp-thumb { transform: translateX(calc(100% + 2px)); }
+  .mode-plate[data-mode="precision"] .mp-prec { color: var(--accent); text-shadow: 0 0 8px rgba(255,216,58,0.4); }
+  .mode-plate[data-mode="precision"] .mp-vinyl { color: var(--dimmer); }
+  .deck-side[data-deck="B"] .mode-plate[data-mode="precision"] .mp-prec { color: var(--accentB); text-shadow: 0 0 8px rgba(46,155,255,0.45); }
+  @keyframes modeBreathA { 0% { box-shadow: 0 0 0 0 rgba(255,216,58,0); } 22% { box-shadow: 0 0 0 3px rgba(255,216,58,0.55), 0 0 26px 4px rgba(255,216,58,0.3); } 100% { box-shadow: 0 0 0 14px rgba(255,216,58,0), 0 0 40px 0 rgba(255,216,58,0); } }
+  @keyframes modeBreathB { 0% { box-shadow: 0 0 0 0 rgba(46,155,255,0); } 22% { box-shadow: 0 0 0 3px rgba(46,155,255,0.6), 0 0 26px 4px rgba(46,155,255,0.32); } 100% { box-shadow: 0 0 0 14px rgba(46,155,255,0), 0 0 40px 0 rgba(46,155,255,0); } }
+  .platter-wrap.mode-pulse { animation: modeBreathA .52s ease-out; }
+  .deck-side[data-deck="B"] .platter-wrap.mode-pulse { animation: modeBreathB .52s ease-out; }
+  .mp-lockwarn { position: absolute; z-index: 3; inset: 0; display: none; align-items: center; justify-content: center; font-size: 8px; letter-spacing: 1.5px; color: var(--dimmer); background: linear-gradient(180deg, #1b1e23, #0c0d10); border-radius: 13px; pointer-events: none; }
+  body.no-precision .mode-plate { cursor: default; pointer-events: none; border-color: var(--line-soft); }
+  body.no-precision .mode-plate .mp-thumb { transform: translateX(0) !important; }
+  body.no-precision .mode-plate .mp-prec { color: var(--dimmer); opacity: .35; }
+  @media (max-width: 380px) { .mode-plate { width: 96px; grid-template-columns: 1fr; } .mode-plate .mp-prec, .mode-plate .mp-thumb { display: none; } }
+
   /* ===== pitch / bpm rows ===== */
   .pitch-row, .bpm-row { display: flex; align-items: center; gap: 10px; margin: 8px 2px; font-size: 11px; min-width: 0; }
   .pitch-row .tag, .bpm-row .tag {
@@ -574,6 +601,12 @@
           <div class="phud-grab">긁는중</div>
           <div class="phud-roll">롤 <b class="phud-rdiv">1/8</b></div>
         </div>
+        <button type="button" class="mode-plate" id="modePlate_A" data-mode="vinyl" role="switch" aria-checked="false" aria-label="덱 A 플래터 모드 — VINYL / 정밀 전환" title="플래터 모드 — VINYL(관성) ↔ 정밀(Pointer Lock)">
+          <span class="mp-thumb" aria-hidden="true"></span>
+          <span class="mp-cell mp-vinyl">VINYL</span>
+          <span class="mp-cell mp-prec">정밀</span>
+          <span class="mp-lockwarn" aria-hidden="true">LOCK 미지원</span>
+        </button>
       </div>
       <label class="file-zone" id="fileZone_A">
         <span class="fz-name" id="fileLabel_A">파일 ↓ / 클릭<br><span class="hint">mp3·wav·flac·mp4…</span></span>
@@ -737,6 +770,12 @@
           <div class="phud-grab">긁는중</div>
           <div class="phud-roll">롤 <b class="phud-rdiv">1/8</b></div>
         </div>
+        <button type="button" class="mode-plate" id="modePlate_B" data-mode="vinyl" role="switch" aria-checked="false" aria-label="덱 B 플래터 모드 — VINYL / 정밀 전환" title="플래터 모드 — VINYL(관성) ↔ 정밀(Pointer Lock)">
+          <span class="mp-thumb" aria-hidden="true"></span>
+          <span class="mp-cell mp-vinyl">VINYL</span>
+          <span class="mp-cell mp-prec">정밀</span>
+          <span class="mp-lockwarn" aria-hidden="true">LOCK 미지원</span>
+        </button>
       </div>
       <label class="file-zone" id="fileZone_B">
         <span class="fz-name" id="fileLabel_B">파일 ↓ / 클릭<br><span class="hint">mp3·wav·flac·mp4…</span></span>
@@ -1867,6 +1906,8 @@ function createDeck(id) {
     isReversed: false,
     rate: 1,
     sensitivity: 1.5,
+    precision: false,           // false=VINYL(관성) · true=PRECISION(Pointer Lock 미세 스크럽)
+    lockActive: false,          // Pointer Lock 활성 중 (정밀 스크래치 진행)
     baseBpm: null,
     activeRollDivision: 0.125,   // 활성 roll 박자(스페이스바·패드 공유), 기본 1/8
     rollHolders: 0,              // roll 잡고 있는 소스 수(패드+스페이스바) — 1→0 전이서만 off 전송
@@ -2123,7 +2164,12 @@ function createDeck(id) {
     if (!deck.buffer) return;
     ensureRunning();
     e.preventDefault();
-    // (Phase 2 hook) precision 모드면 여기서 분기: lockActive 세팅 + Pointer Lock 요청 + dragging 미설정 (C7) + armIdleStop 금지 (C10)
+    if (deck.precision && PRECISION_SUPPORTED) {   // PRECISION: Pointer Lock 요청만. scratch-start·toast·visual·dragging은 lock 획득(pointerlockchange)에서. 캡처/armIdleStop 안 함 (C7/C10)
+      deck.lastTime = performance.now();
+      const p = el.platter.requestPointerLock({ unadjustedMovement: true });
+      if (p && typeof p.catch === 'function') p.catch((err) => { if (err && err.name === 'NotSupportedError') { try { el.platter.requestPointerLock(); } catch (_) {} } });
+      return;
+    }
     deck.dragging = true;
     deck.scratchSource = 'platter';
     el.platter.classList.add('scratching');
@@ -2136,6 +2182,35 @@ function createDeck(id) {
     if (e.pointerId !== undefined) el.platter.setPointerCapture(e.pointerId);
   });
   el.platter.addEventListener('contextmenu', e => e.preventDefault());
+
+  // --- PRECISION (Pointer Lock 미세 스크럽) — spike 검증: pointerup이 락 유지(B1), clientX/Y frozen→movement만, Esc는 pointerlockchange로만 ---
+  document.addEventListener('pointermove', (e) => {
+    if (document.pointerLockElement !== el.platter || !deck.lockActive || !deck.node) return;
+    const now = performance.now();
+    const dt = (now - deck.lastTime) / 1000;
+    deck.lastTime = now;
+    if (dt <= 0) return;
+    let vel = (e.movementX / dt) * PRECISION_GAIN / 1000;   // px/s → 재생속도 (raw movement, OS 가속 없음)
+    if (!isFinite(vel)) return;
+    if (vel > PRECISION_MAX) vel = PRECISION_MAX; else if (vel < -PRECISION_MAX) vel = -PRECISION_MAX;
+    deck.node.port.postMessage({ type: 'scratch-velocity', value: vel });
+    armIdleStop();   // 멈추면 레코드 정지(폭주 방지) — 정밀에선 50ms가 적절(손 멈춤=정지)
+  });
+  document.addEventListener('pointerlockchange', () => {
+    const locked = document.pointerLockElement === el.platter;
+    if (locked && !deck.lockActive) {
+      deck.lockActive = true; deck.scratchSource = 'precision'; deck.lastTime = performance.now();
+      el.platter.classList.add('scratching');
+      if (deck.node) deck.node.port.postMessage({ type: 'scratch-start' });
+      showToast({ deck: id, kind: 'lock', id: 'plk' + id, duration: 0, title: '정밀 모드', msg: '커서 잠금 · 미세 스크럽 · 버튼 떼도 유지', key: 'ESC' });
+    } else if (!locked && deck.lockActive) {
+      deck.lockActive = false; deck.scratchSource = null;
+      clearTimeout(deck.idleTimer);
+      el.platter.classList.remove('scratching');
+      if (deck.node) deck.node.port.postMessage({ type: 'scratch-end', smoothing: VINYL_SMOOTHING });
+      dismissToast('plk' + id);
+    }
+  });
 
   function onMove(e) {
     if (!deck.dragging) return;
@@ -2299,6 +2374,34 @@ sizeCanvas(deckA); sizeCanvas(deckB);
     if (sv) sv.textContent = dk.sensitivity.toFixed(2) + 'x';
   });
 });
+
+// 플래터 모드 토글 (VINYL ↔ 정밀 Pointer Lock) — RIM PLATE (UX tournament) + spike 검증
+const PRECISION_GAIN = 0.6;    // 정밀 스크럽 감도 (movementX px/s → 재생속도) — 튜닝값
+const PRECISION_MAX = 10;      // 정밀 속도 클램프 (±배속)
+const PRECISION_SUPPORTED = ('requestPointerLock' in HTMLElement.prototype) && matchMedia('(pointer: fine)').matches && !matchMedia('(pointer: coarse)').matches;
+if (!PRECISION_SUPPORTED) document.body.classList.add('no-precision');
+['A', 'B'].forEach(id => {
+  const dk = (id === 'A') ? deckA : deckB;
+  const plate = document.getElementById('modePlate_' + id);
+  if (!plate) return;
+  const wrap = plate.closest('.platter-wrap');
+  function reflectMode(animate) {
+    const on = !!dk.precision;
+    plate.dataset.mode = on ? 'precision' : 'vinyl';
+    plate.setAttribute('aria-checked', String(on));
+    if (animate && wrap) { wrap.classList.remove('mode-pulse'); void wrap.offsetWidth; wrap.classList.add('mode-pulse'); }
+  }
+  if (wrap) wrap.addEventListener('animationend', () => wrap.classList.remove('mode-pulse'));
+  function setMode(next, animate) {
+    if (!PRECISION_SUPPORTED) { dk.precision = false; reflectMode(false); return; }
+    if (dk.dragging || dk.lockActive) return;   // 스크래치/락 중 전환 금지
+    dk.precision = !!next;
+    reflectMode(animate);
+  }
+  dk.setPlatterMode = setMode;
+  plate.addEventListener('click', () => setMode(!dk.precision, true));
+  reflectMode(false);
+});
 // 설정 아코디언 토글 (각 영역 독립)
 // ===== 설정 팝업 레이어 (섹션별 풀스크린, 한 번에 하나) =====
 function closeAllSettings() {
@@ -2321,7 +2424,7 @@ document.querySelectorAll('.set-panel').forEach(panel => {
   panel.addEventListener('click', (e) => { if (e.target === panel) closeAllSettings(); });
 });
 // ESC = 닫기
-window.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAllSettings(); });
+window.addEventListener('keydown', (e) => { if (e.key !== 'Escape') return; if (deckA.lockActive || deckB.lockActive) return; closeAllSettings(); });   // C13: 정밀 락 활성이면 Esc는 락 해제(pointerlockchange)에만 — 패널 안 닫음
 
 // ============================================================
 // EQ 로터리 노브 — 세로 드래그/휠/더블클릭. 숨김 range input에 반영(엔진 배선 유지)
@@ -2553,6 +2656,7 @@ function resetTransientInput() {
   cfKeyStack = [];
   cfTarget = crossfade;
   cfCtl.reset();   // 래치/펄스 안전 해제 + 게인 복귀 (A1)
+  if (document.pointerLockElement) { try { document.exitPointerLock(); } catch (_) {} }   // 정밀 락 해제 (blur/visibility) → pointerlockchange가 정리
   [deckA, deckB].forEach(d => { while (d.rollHolders > 0) rollOff(d); });
   document.querySelectorAll('.rollpads .lp.rolling').forEach(b => b.classList.remove('rolling'));
 }
