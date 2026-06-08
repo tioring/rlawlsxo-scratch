@@ -1293,19 +1293,33 @@ function detectBPM(buffer) {
   for (let lag = minLag; lag <= maxLag; lag++) {
     let score = 0, cnt = 0;
     for (let k = 1; k * lag <= maxLag; k++) { score += ac[k * lag]; cnt++; }
-    score /= cnt;                              // 하모닉 개수로 정규화 → 작은 lag 편향 제거
+    // sqrt(하모닉 개수)로 정규화: 정수배 하모닉이 동시에 강한 후보(=기본 비트)를 우대해
+    // 절반템포(slow) octave 오류를 완화하되, 단순 합산(SUM)처럼 과하게 빠른 lag로 쏠려
+    // 두배템포(fast)로 튀지 않게 절충. (기존 /=cnt 는 느린 템포로, /=1(SUM)은 빠른 템포로 편향)
+    score /= Math.sqrt(cnt);
     if (score > bestScore) { bestScore = score; bestLag = lag; }
   }
   if (bestScore <= 0) return null;
   // parabolic interpolation으로 peak lag 정밀화 (envelope 양자화 오차 보정)
+  // 주의: bestLag는 comb-score의 argmax라 ac[]의 local max가 아닐 수 있음 → 단조 구간이면
+  // 포물선이 외삽되어 refined가 폭주(음수/거대값 → 음수·거대 BPM). ac[]에서 실제 local max일
+  // 때만 보간하고, 정점 offset의 이론 범위 [-0.5, 0.5]로 클램프한다.
   let refined = bestLag;
   if (bestLag > minLag && bestLag < maxLag) {
     const y0 = ac[bestLag - 1], y1 = ac[bestLag], y2 = ac[bestLag + 1];
-    const denom = y0 - 2 * y1 + y2;
-    if (denom !== 0) refined = bestLag + 0.5 * (y0 - y2) / denom;
+    if (y1 >= y0 && y1 >= y2) {
+      const denom = y0 - 2 * y1 + y2;
+      if (Math.abs(denom) > 1e-12) {
+        let off = 0.5 * (y0 - y2) / denom;
+        if (off < -0.5) off = -0.5; else if (off > 0.5) off = 0.5;
+        refined = bestLag + off;
+      }
+    }
   }
   // 검출 범위(70~180)가 1옥타브라 추가 octave-fold 없이 그대로 사용
   const bpm = 60 * envSr / refined;
+  // degenerate(비정상 lag) 방어: 유효 범위 밖이면 검출 실패로 처리해 수동 입력을 유도
+  if (!isFinite(bpm) || bpm < 60 || bpm > 200) return null;
   return Math.round(bpm * 10) / 10;
 }
 
