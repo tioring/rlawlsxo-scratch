@@ -1252,7 +1252,7 @@ function setParam(param, value, opts) {
 // CrossfaderController — 래치 컷 (Shift+Q/W/E) (PLAN §3.2 / Phase 4)
 //   normal: 기존 cfKeyStack(QWER) 로직 유지. latched: 컨트롤러가 게인을 setParam cut으로 소유 (rAF 추종 스킵, DSP-3)
 // ============================================================
-const PULSE_SEC = 0.09;   // Q/W 펄스 컷 폭 — > 2·(CUT_MS+PARAM_LA) 보장 (DSP-4/C12)
+const PULSE_SEC = 0.12;   // Q/W 펄스 컷 폭 (120ms) — > 2·(CUT_MS+PARAM_LA) 보장 (DSP-4/C12)
 const cfCtl = {
   mode: 'normal',         // 'normal' | 'latched'
   anchor: 0.5,            // 래치 시점 crossfade 스칼라값 (C16 — geometry 아님)
