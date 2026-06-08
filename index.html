@@ -1164,6 +1164,8 @@ async function initAudio() {
       console.log('[engine] AudioWorklet 미지원 → ScriptProcessor fallback 사용');
     }
   })();
+  // 초기화 실패(예: AudioContext 생성 불가) 시 거부된 promise가 영구 캐시돼 양 덱이 brick되는 것 방지 → 캐시 해제로 재시도 허용
+  audioInitPromise.catch(() => { audioInitPromise = null; });
   return audioInitPromise;
 }
 
@@ -1177,6 +1179,15 @@ function createScratchNode() {
     }
   }
   return createScriptProcessorFallback(audioCtx);
+}
+
+// 파일명 등 사용자 제어 문자열을 innerHTML에 넣기 전 이스케이프 (XSS 방지)
+function escHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+// AudioContext가 (백그라운드/자동재생 정책/OS 인터럽트 등으로) running이 아니면 재개 — 제스처 내에서 호출
+function ensureRunning() {
+  if (audioCtx && audioCtx.state !== 'running') audioCtx.resume().catch(() => {});
 }
 
 // ============================================================
@@ -1599,22 +1610,34 @@ function createDeck(id) {
   }
 
   async function loadFile(file) {
+    const myLoad = deck.loadSeq = (deck.loadSeq || 0) + 1;   // 동시 로드 경합 토큰: 늦게 끝난 옛 로드가 새 로드를 덮지 않게
     try {
       await ensureNode();
+      if (myLoad !== deck.loadSeq) return;
       if (audioCtx.state === 'suspended') await audioCtx.resume();
+      if (myLoad !== deck.loadSeq) return;
 
       el.fileLabel.textContent = `로딩 중… ${file.name}`;
       const arrayBuf = await file.arrayBuffer();
+      if (myLoad !== deck.loadSeq) return;
 
       let decoded;
       try {
         decoded = await audioCtx.decodeAudioData(arrayBuf);
       } catch (decodeErr) {
+        if (myLoad !== deck.loadSeq) return;
         console.error('decodeAudioData failed:', decodeErr);
-        el.fileLabel.innerHTML = `<span style="color:#ff5e3a;">디코딩 실패</span> — 이 브라우저가 <strong>${file.name}</strong>의 코덱을 지원하지 않습니다.<br><span class="hint">mp4는 AAC 오디오 트랙만 사용 가능.</span>`;
+        el.fileLabel.innerHTML = `<span style="color:#ff5e3a;">디코딩 실패</span> — 이 브라우저가 <strong>${escHtml(file.name)}</strong>의 코덱을 지원하지 않습니다.<br><span class="hint">mp4는 AAC 오디오 트랙만 사용 가능.</span>`;
+        // 디코드 실패 시 이전 트랙이 살아있던 문제 → 덱을 빈 상태로 되돌려 UI와 일치시킴
+        deck.buffer = null; deck.originalBuffer = null; deck.isPlaying = false;
+        if (deck.node) deck.node.port.postMessage({ type: 'play', value: false });
+        el.playBtn.textContent = '▶ Play';
+        el.playBtn.disabled = true; el.cueBtn.disabled = true; el.reverseBtn.disabled = true;
+        el.fileZone.classList.remove('has-file');
         return;
       }
 
+      if (myLoad !== deck.loadSeq) return;   // 핵심 가드: 디코드까지 끝난 시점에 더 새 로드가 있으면 커밋 중단(stale 방지)
       deck.buffer = decoded;
       deck.originalBuffer = decoded;
       deck.duration = decoded.duration;
@@ -1622,12 +1645,10 @@ function createDeck(id) {
       // BPM 자동검출 (베스트에포트 — 수동 입력으로 덮어쓸 수 있음)
       const detected = detectBPM(decoded);
       deck.originalBpm = detected;
-      if (detected) {
-        deck.baseBpm = detected;
-        el.bpmBase.value = detected;
-        el.stretchBpm.value = detected;
-        updateBpm();
-      }
+      deck.baseBpm = detected || null;        // 검출 실패(null)면 이전 트랙 BPM 잔존 방지(비트롤/그리드 오작동 방지)
+      el.bpmBase.value = detected ? detected : '';
+      el.stretchBpm.value = detected ? detected : '';
+      updateBpm();
 
       const channels = [];
       for (let ch = 0; ch < decoded.numberOfChannels; ch++) {
@@ -1635,7 +1656,7 @@ function createDeck(id) {
       }
       deck.node.port.postMessage({ type: 'load', channels }, channels.map(c => c.buffer));
 
-      el.fileLabel.innerHTML = `<strong>${file.name}</strong><br><span class="hint">${formatTime(deck.duration)} · ${decoded.numberOfChannels}ch · ${decoded.sampleRate}Hz</span>`;
+      el.fileLabel.innerHTML = `<strong>${escHtml(file.name)}</strong><br><span class="hint">${formatTime(deck.duration)} · ${decoded.numberOfChannels}ch · ${decoded.sampleRate}Hz</span>`;
       el.fileZone.classList.add('has-file');
       el.playBtn.disabled = false;
       el.cueBtn.disabled = false;
@@ -1645,16 +1666,19 @@ function createDeck(id) {
       deck.isPlaying = false;
       el.playBtn.textContent = '▶ Play';
       deck.hotcues = [null, null, null, null];
+      deck.rollHolders = 0;          // 로드 시 roll 홀더 카운트 리셋(이전 트랙 잔존 방지)
       updateHotcueUI(deck);
       buildWaveform(deck);
     } catch (err) {
+      if (myLoad !== deck.loadSeq) return;
       console.error('loadFile error:', err);
-      el.fileLabel.innerHTML = `<span style="color:#ff5e3a;">에러</span> — ${err.message || err}`;
+      el.fileLabel.innerHTML = `<span style="color:#ff5e3a;">에러</span> — ${escHtml(err.message || err)}`;
     }
   }
 
   function togglePlay() {
     if (!deck.buffer) return;
+    ensureRunning();
     deck.isPlaying = !deck.isPlaying;
     deck.node.port.postMessage({ type: 'play', value: deck.isPlaying });
     el.playBtn.textContent = deck.isPlaying ? '❚❚ Pause' : '▶ Play';
@@ -2000,6 +2024,7 @@ document.querySelectorAll('.eq-knob').forEach(initEqKnob);
 
 // R 키 — 양 덱 동시 재생/정지 토글 (하나라도 재생 중이면 둘 다 정지, 아니면 둘 다 재생)
 function togglePlayBoth() {
+  ensureRunning();
   const want = !(deckA.isPlaying || deckB.isPlaying);
   [deckA, deckB].forEach(d => {
     if (!d.buffer) return;
