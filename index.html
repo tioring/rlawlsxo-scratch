@@ -119,6 +119,9 @@
   .fz-cell .val { font-family: "JetBrains Mono", monospace; font-size: 13px; color: var(--lcd); white-space: nowrap; }
   input[type=file] { display: none; }
 
+  /* 터치: 드래그 표면이 브라우저 제스처(스크롤/줌)에 뺏기지 않게 — 없으면 첫 터치무브가 pointercancel→스크래치 즉시 종료 (UX audit) */
+  .platter, .progress, .wave, input[type=range].vrange, .crossfader-row input[type=range] { touch-action: none; }
+
   /* ===== platter ===== */
   .platter-wrap { position: relative; width: min(264px, 92%); aspect-ratio: 1/1; margin: 4px auto 14px; }
   .platter {
@@ -221,8 +224,11 @@
     font-family: "Barlow Semi Condensed", sans-serif; background: linear-gradient(180deg, var(--metal-1), var(--metal-2));
     color: var(--text); border: 1px solid var(--line); padding: 11px 6px; font-size: 11px; font-weight: 600;
     letter-spacing: 1.5px; text-transform: uppercase; cursor: pointer; border-radius: 6px; min-width: 0;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 2px 4px rgba(0,0,0,0.4); transition: all .12s;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 2px 4px rgba(0,0,0,0.4);
+    transition: transform .08s ease, box-shadow .12s ease, border-color .12s ease, color .12s ease, background .12s ease, filter .12s ease;
   }
+  button:active:not(:disabled):not(.set-gear) { transform: translateY(1px) scale(0.985); box-shadow: inset 0 2px 5px rgba(0,0,0,0.55), 0 1px 2px rgba(0,0,0,0.5); filter: brightness(0.94); }   /* 눌림 피드백 (UX audit) */
+  .set-gear:active { filter: brightness(0.92); box-shadow: inset 0 2px 4px rgba(0,0,0,0.5); }
   button:hover:not(:disabled) { border-color: var(--metal-hi); color: #fff; }
   button:disabled { opacity: 0.4; cursor: not-allowed; }
   button.active { background: linear-gradient(180deg, var(--accent), var(--A-deep)); color: #0a0b0d; border-color: var(--A-deep); box-shadow: inset 0 1px 0 rgba(255,255,255,0.4), 0 0 14px rgba(255,190,70,0.3); }
@@ -387,6 +393,18 @@
     .mix-row { grid-template-columns: 1fr; }
     .mix-cap { display: none; }
     .faders { gap: 24px; }
+  }
+
+  /* ===== a11y: 키보드 포커스 링 (UX audit — 모든 range가 outline:none인데 대체 없음, WCAG 2.4.7) ===== */
+  :where(button, input, [tabindex], .eq-knob):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .deck-side[data-deck="B"] :focus-visible, .ch[data-deck="B"] :focus-visible, [data-deck="B"].hotcues :focus-visible, [data-deck="B"].rollpads :focus-visible, #vol_B:focus-visible { outline-color: var(--accentB); }
+  .crossfader-row input[type=range]:focus-visible { outline-color: #fff; outline-offset: 3px; }
+
+  /* ===== reduced-motion: OS 모션 최소화 존중 (WCAG 2.3.3) — 상태는 색/그림자로 유지 ===== */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .06s !important; }
+    .platter, .eq-ind { transition: none !important; }   /* rAF가 매 프레임 inline transform → CSS 보간 금지(밀림 방지) */
+    button:active:not(:disabled):not(.set-gear) { transform: none !important; }
   }
 
 </style>
@@ -2316,9 +2334,10 @@ window.addEventListener('keyup', (e) => {
 // ============================================================
 // 시각 업데이트 루프
 // ============================================================
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');   // UX audit: 영구 모션 게이트
 function updateDeckVisual(deck, dt) {
   if (!deck.buffer) return;
-  if (!deck.dragging) {
+  if (!deck.dragging && !reduceMotion.matches) {   // reduce-motion: 영구 회전 정지 (진행바·시간으로 재생 표시) — UX audit
     // 1x 재생 ≈ 240 deg/초 (1바퀴/초 = 1.5x 매핑의 역)
     deck.visualAngle += deck.curVel * 240 * dt;
   }

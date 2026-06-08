@@ -45,6 +45,7 @@ scratch-processor(worklet) → EQ(low/mid/high biquad) → volume(gain)
 ## 키맵
 ```
 Q W E R   크로스페이더 4포인트 (현재 위치에서 먼 곳일수록 빠르게)
+Shift+Q/W/E  크로스페이더 래치 컷 토글 (앵커=토글 시점 위치) · latched 중 Q/W=펄스컷(120ms)·E=긴컷 (cfCtl)
 A S D F   덱 A 핫큐 1~4   (Shift = 삭제)
 Z X C V   덱 B 핫큐 1~4   (Shift = 삭제)
 Platter 드래그 = 스크래치 · 잡고 멈추면 정지 · 손 놓으면 관성 복귀
