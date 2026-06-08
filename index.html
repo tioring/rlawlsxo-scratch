@@ -723,6 +723,7 @@ class ScratchProcessor extends AudioWorkletProcessor {
           break;
         case 'scratch-velocity':
           // 사용자가 jog 회전 중. velocity 직접 설정
+          if (!isFinite(d.value)) break;   // NaN/Inf 차단 (fallback과 parity) — 오염 velocity가 position을 poison하는 것 방지
           this.targetVelocity = d.value;
           // 디폴트로 미세 smoothing (~7ms tau @48k) — 분필 드르륵 방지
           this.smoothing = d.smoothing ?? 0.997;
@@ -855,8 +856,10 @@ class ScratchProcessor extends AudioWorkletProcessor {
         while (this.position < this.rollStart) this.position += rl;
       }
 
-      // 경계 처리
-      if (this.position < 0) {
+      // 경계 처리 (+ NaN 방어: 오염된 position 리셋 — 기존 클램프는 NaN을 못 잡음, fallback과 parity)
+      if (this.position !== this.position) {
+        this.position = 0; this.velocity = 0; this.targetVelocity = 0;
+      } else if (this.position < 0) {
         this.position = 0;
         if (this.velocity < 0) this.velocity = 0;
       } else if (this.position >= len - 1) {
@@ -968,6 +971,7 @@ function createScriptProcessorFallback(ctx) {
         s.smoothing = data.smoothing ?? 0.997;
         break;
       case 'scratch-velocity':
+        if (!isFinite(data.value)) break;   // NaN/Inf 차단 (worklet과 parity)
         s.targetVelocity = data.value;
         s.smoothing = data.smoothing ?? 0.997;
         break;
@@ -1097,7 +1101,9 @@ function createScriptProcessorFallback(ctx) {
         while (s.position < s.rollStart) s.position += rl;
       }
 
-      if (s.position < 0) {
+      if (s.position !== s.position) {   // NaN 방어 — worklet과 parity
+        s.position = 0; s.velocity = 0; s.targetVelocity = 0;
+      } else if (s.position < 0) {
         s.position = 0;
         if (s.velocity < 0) s.velocity = 0;
       } else if (s.position >= len - 1) {
@@ -1146,7 +1152,8 @@ let audioInitPromise = null;
 async function initAudio() {
   if (audioInitPromise) return audioInitPromise;
   audioInitPromise = (async () => {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
+    console.log('[engine] baseLatency:', audioCtx.baseLatency, '· sampleRate:', audioCtx.sampleRate);
     masterGain = audioCtx.createGain();
     masterGain.gain.value = 0.85;   // 두 덱 합산 클리핑 여유
     masterGain.connect(audioCtx.destination);
@@ -1218,12 +1225,26 @@ function cfGains(t) {
   // smooth: equal-power (constant power)
   return [Math.cos(t * Math.PI / 2), Math.sin(t * Math.PI / 2)];
 }
-function gainA() { return cfGains(crossfade)[0]; }
-function gainB() { return cfGains(crossfade)[1]; }
+// gainA()/gainB() 제거 — applyCrossfade로 게인 쓰기 일원화 후 호출처 0 (dead). cfGains가 유일 소비처
 function applyCrossfade() {
   const g = cfGains(crossfade);
   if (deckA.gainNode) deckA.gainNode.gain.value = g[0];
   if (deckB.gainNode) deckB.gainNode.gain.value = g[1];
+}
+// 게인/파라미터 전이 단일 창구 (Phase0 인프라). immediate=즉시대입 · smooth=연사 디지퍼 · cut=래치 컷(후속 Phase)
+const PARAM_LA = 0.008;   // 스케줄 look-ahead (FF currentTime 라운딩+스레드지연 흡수)
+const CUT_MS = 0.004;     // 래치 컷 램프 길이
+function setParam(param, value, opts) {
+  const mode = (opts && opts.mode) || 'immediate';
+  if (!isFinite(value)) return;
+  if (mode === 'immediate') { param.value = value; return; }
+  const t = audioCtx.currentTime + PARAM_LA;
+  if (mode === 'smooth') param.setTargetAtTime(value, t, 0.008);
+  else if (mode === 'cut') {
+    param.cancelScheduledValues(audioCtx.currentTime);
+    param.setValueAtTime(param.value, t);
+    param.linearRampToValueAtTime(value, t + CUT_MS);
+  }
 }
 
 // ============================================================
@@ -1592,7 +1613,7 @@ function createDeck(id) {
     deck.eqHigh = audioCtx.createBiquadFilter(); deck.eqHigh.type = 'highshelf'; deck.eqHigh.frequency.value = 3500;
     deck.volume = audioCtx.createGain();
     deck.gainNode = audioCtx.createGain();
-    deck.gainNode.gain.value = (id === 'A') ? gainA() : gainB();
+    applyCrossfade();   // 게인 권위 일원화(B6): 직접쓰기 제거 — applyCrossfade가 양 덱 gain 유일 writer
     deck.node.connect(deck.eqLow);
     deck.eqLow.connect(deck.eqMid);
     deck.eqMid.connect(deck.eqHigh);
@@ -1732,10 +1753,10 @@ function createDeck(id) {
   });
 
   // --- EQ / 볼륨 ---
-  el.eqLow.addEventListener('input', () => { if (deck.eqLow) deck.eqLow.gain.value = parseFloat(el.eqLow.value); });
-  el.eqMid.addEventListener('input', () => { if (deck.eqMid) deck.eqMid.gain.value = parseFloat(el.eqMid.value); });
-  el.eqHigh.addEventListener('input', () => { if (deck.eqHigh) deck.eqHigh.gain.value = parseFloat(el.eqHigh.value); });
-  el.vol.addEventListener('input', () => { if (deck.volume) deck.volume.gain.value = parseFloat(el.vol.value); });
+  el.eqLow.addEventListener('input', () => { if (deck.eqLow) setParam(deck.eqLow.gain, parseFloat(el.eqLow.value), { mode: 'smooth' }); });
+  el.eqMid.addEventListener('input', () => { if (deck.eqMid) setParam(deck.eqMid.gain, parseFloat(el.eqMid.value), { mode: 'smooth' }); });
+  el.eqHigh.addEventListener('input', () => { if (deck.eqHigh) setParam(deck.eqHigh.gain, parseFloat(el.eqHigh.value), { mode: 'smooth' }); });
+  el.vol.addEventListener('input', () => { if (deck.volume) setParam(deck.volume.gain, parseFloat(el.vol.value), { mode: 'smooth' }); });
 
   // --- 타임스트레치 (오프라인 Apply: 원본 → 스트레치 buffer → 엔진 재로드) ---
   // preserve=true면 재생위치·핫큐를 (옛 버퍼 길이 기준 정규화 → 새 버퍼로 remap) 보존.
@@ -2174,6 +2195,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) reset
 window.addEventListener('keydown', (e) => {
   if (e.repeat) return;
   if (document.querySelector('.set-panel.open')) return;   // 설정 팝업 열려있으면 단축키 차단
+  if (introOverlay && !introOverlay.classList.contains('hidden')) return;   // intro 모달 떠있으면 단축키 차단 (누수 방지, Fold-1)
   const tag = e.target && e.target.tagName;
   // 텍스트/숫자 입력칸(BPM 등) 타이핑 중에만 단축키 차단 — 슬라이더(range)·버튼은 허용
   if (tag === 'TEXTAREA' || (tag === 'INPUT' && e.target.type !== 'range')) return;
