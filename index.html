@@ -155,6 +155,31 @@
   }
   .deck-side[data-deck="B"] .marker { background: linear-gradient(to top, transparent 0%, var(--accentB) 80%, #fff 100%); }
 
+  /* ===== PLATTER STATE HUD (UX tournament winner) — non-rotated .platter-wrap/.platter-hud, cold elements ===== */
+  .deck-side { --pc: var(--accent); --pc-deep: var(--A-deep); }
+  .deck-side[data-deck="B"] { --pc: var(--accentB); --pc-deep: var(--B-deep); }
+  .platter-wrap { border-radius: 50%; transition: box-shadow .22s ease; }
+  .platter-wrap[data-pstate="play"] { box-shadow: 0 0 0 2px color-mix(in srgb, var(--pc) 70%, transparent), 0 0 22px color-mix(in srgb, var(--pc) 32%, transparent); }
+  .platter-wrap[data-pstate="cue"] { box-shadow: 0 0 0 2px color-mix(in srgb, var(--pc) 55%, transparent); }
+  .platter-wrap[data-pstate="end"] { box-shadow: 0 0 0 2px color-mix(in srgb, var(--A-deep) 70%, transparent), 0 0 18px rgba(232,96,75,0.28); }
+  .platter-wrap[data-grab="1"] { box-shadow: 0 0 0 2px #ff5e3a, 0 0 26px rgba(255,94,58,0.40) !important; }
+  .platter-hud { position: absolute; inset: 0; border-radius: 50%; pointer-events: none; font-family: "Barlow Semi Condensed", sans-serif; z-index: 3; }
+  .phud-status { position: absolute; top: -11px; left: 50%; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: linear-gradient(180deg, #1a1d22, #0c0d10); border: 1px solid var(--line); box-shadow: 0 2px 8px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06); font-weight: 700; font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--dim); opacity: 0; transition: opacity .18s ease, border-color .18s ease, color .18s ease; white-space: nowrap; }
+  .phud-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; background: var(--dimmer); transition: background .18s ease, box-shadow .18s ease; }
+  .platter-wrap:not([data-pstate="empty"]) .phud-status { opacity: 1; }
+  .platter-wrap[data-pstate="play"] .phud-status { color: var(--pc); border-color: color-mix(in srgb, var(--pc) 45%, var(--line)); }
+  .platter-wrap[data-pstate="play"] .phud-dot { background: var(--pc); box-shadow: 0 0 8px var(--pc); animation: phudPulse 1.15s ease-in-out infinite; }
+  .platter-wrap[data-pstate="end"] .phud-status { color: var(--A-deep); border-color: color-mix(in srgb, var(--A-deep) 50%, var(--line)); }
+  .platter-wrap[data-pstate="end"] .phud-dot { background: var(--A-deep); box-shadow: 0 0 7px var(--A-deep); }
+  .platter-wrap[data-pstate="idle"] .phud-status { color: var(--dim); }
+  .platter-wrap[data-pstate="idle"] .phud-dot { background: var(--dimmer); box-shadow: none; }
+  @keyframes phudPulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+  .phud-grab { position: absolute; top: 50%; left: -8px; transform: translate(-100%, -50%) scale(.9); padding: 4px 9px; border-radius: 5px; background: linear-gradient(180deg, #ff7a5c, #ff5e3a); color: #160603; font-weight: 700; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; box-shadow: 0 2px 10px rgba(255,94,58,0.45), inset 0 1px 0 rgba(255,255,255,0.35); opacity: 0; transition: opacity .12s ease, transform .12s ease; white-space: nowrap; }
+  .platter-wrap[data-grab="1"] .phud-grab { opacity: 1; transform: translate(-100%, -50%) scale(1); }
+  .phud-roll { position: absolute; top: 50%; right: -8px; transform: translate(100%, -50%) scale(.9); padding: 4px 9px; border-radius: 5px; background: linear-gradient(180deg, var(--pc), var(--pc-deep)); color: #0a0b0d; font-weight: 700; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; box-shadow: 0 2px 10px color-mix(in srgb, var(--pc) 40%, transparent), inset 0 1px 0 rgba(255,255,255,0.4); opacity: 0; transition: opacity .1s ease, transform .1s ease; white-space: nowrap; }
+  .phud-roll b { font-family: "JetBrains Mono", monospace; font-weight: 700; }
+  .platter-wrap[data-roll="1"] .phud-roll { opacity: 1; transform: translate(100%, -50%) scale(1); }
+
   /* ===== pitch / bpm rows ===== */
   .pitch-row, .bpm-row { display: flex; align-items: center; gap: 10px; margin: 8px 2px; font-size: 11px; min-width: 0; }
   .pitch-row .tag, .bpm-row .tag {
@@ -474,11 +499,16 @@
     <!-- ===== 왼쪽: 덱 A 턴테이블 ===== -->
     <section class="deck-side" data-deck="A">
       <button class="set-gear" data-set="deckA" title="덱 A 설정">⚙</button>
-      <div class="platter-wrap">
+      <div class="platter-wrap" data-pstate="empty">
         <div class="platter" id="platter_A">
           <div class="marker" id="marker_A"></div>
           <div class="label">A</div>
           <div class="spindle"></div>
+        </div>
+        <div class="platter-hud" aria-hidden="true">
+          <div class="phud-status"><i class="phud-dot"></i><span class="phud-stxt">정지</span></div>
+          <div class="phud-grab">긁는중</div>
+          <div class="phud-roll">롤 <b class="phud-rdiv">1/8</b></div>
         </div>
       </div>
       <label class="file-zone" id="fileZone_A">
@@ -632,11 +662,16 @@
     <!-- ===== 오른쪽: 덱 B 턴테이블 ===== -->
     <section class="deck-side" data-deck="B">
       <button class="set-gear" data-set="deckB" title="덱 B 설정">⚙</button>
-      <div class="platter-wrap">
+      <div class="platter-wrap" data-pstate="empty">
         <div class="platter" id="platter_B">
           <div class="marker" id="marker_B"></div>
           <div class="label">B</div>
           <div class="spindle"></div>
+        </div>
+        <div class="platter-hud" aria-hidden="true">
+          <div class="phud-status"><i class="phud-dot"></i><span class="phud-stxt">정지</span></div>
+          <div class="phud-grab">긁는중</div>
+          <div class="phud-roll">롤 <b class="phud-rdiv">1/8</b></div>
         </div>
       </div>
       <label class="file-zone" id="fileZone_B">
@@ -2419,7 +2454,22 @@ window.addEventListener('keyup', (e) => {
 // 시각 업데이트 루프
 // ============================================================
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');   // UX audit: 영구 모션 게이트
+// 플래터 상태 HUD (UX tournament): 기존 플래그에서 파생 — 전이 시에만 attr 갱신 (idempotent, rAF 비용 무시가능)
+const PHUD_TXT = { play: '재생', idle: '정지', empty: '' };
+function phudFmtDiv(d) { return d < 1 ? ('1/' + Math.round(1 / d)) : String(d); }
+function setPlatterState(deck) {
+  const el = deck.el;
+  if (!el._psW) { el._psW = el.platter.parentElement; el._psTxt = el._psW.querySelector('.phud-stxt'); el._psRdiv = el._psW.querySelector('.phud-rdiv'); }
+  const w = el._psW; if (!w) return;
+  const st = !deck.buffer ? 'empty' : (deck.isPlaying ? 'play' : 'idle');
+  if (w.dataset.pstate !== st) { w.dataset.pstate = st; if (PHUD_TXT[st] && el._psTxt) el._psTxt.textContent = PHUD_TXT[st]; }
+  const grab = deck.scratchSource === 'platter' ? '1' : '0';
+  if (w.dataset.grab !== grab) w.dataset.grab = grab;
+  const roll = deck.rollHolders > 0 ? '1' : '0';
+  if (w.dataset.roll !== roll) { w.dataset.roll = roll; if (roll === '1' && el._psRdiv) el._psRdiv.textContent = phudFmtDiv(deck.activeRollDivision || 0.125); }
+}
 function updateDeckVisual(deck, dt) {
+  setPlatterState(deck);   // 상태 HUD 동기
   if (!deck.buffer) return;
   if (!deck.dragging && !reduceMotion.matches) {   // reduce-motion: 영구 회전 정지 (진행바·시간으로 재생 표시) — UX audit
     // 1x 재생 ≈ 240 deg/초 (1바퀴/초 = 1.5x 매핑의 역)
