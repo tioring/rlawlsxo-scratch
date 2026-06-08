@@ -483,6 +483,16 @@
     .faders { gap: 24px; }
   }
 
+  /* ===== 모션-큐드 폴리시 (UX tournament winner) — cold elements, GPU-only ===== */
+  .crossfader-row { position: relative; }
+  .crossfader-row::before { content: ""; position: absolute; left: 50%; top: 50%; width: 2px; height: 16px; transform: translate(-50%,-50%); border-radius: 1px; pointer-events: none; z-index: 3; background: linear-gradient(180deg, rgba(255,255,255,0.28), rgba(255,255,255,0.06)); opacity: .5; transition: opacity .15s ease; }
+  .crossfader-row:hover::before { opacity: .8; }
+  .hc.cue-press, .lp.cue-press { animation: padRippleA .42s ease-out 1; }
+  .hc[data-deck="B"].cue-press, .lp[data-deck="B"].cue-press { animation: padRippleB .42s ease-out 1; }
+  @keyframes padRippleA { 0% { box-shadow: 0 0 0 0 rgba(255,216,58,0.5); } 100% { box-shadow: 0 0 0 7px rgba(255,216,58,0); } }
+  @keyframes padRippleB { 0% { box-shadow: 0 0 0 0 rgba(46,155,255,0.5); } 100% { box-shadow: 0 0 0 7px rgba(46,155,255,0); } }
+  .lp.rolling { transform: translateY(-1px); }
+
   /* ===== 토스트 랙 — 섀시에서 튀어나오는 머신드 메탈 상태 모듈 (UX tournament winner, 8.7) ===== */
   .toast-rack { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%); z-index: 950; display: flex; flex-direction: column-reverse; gap: 9px; width: max-content; max-width: min(440px, 92vw); pointer-events: none; }
   .hw-toast {
@@ -2490,7 +2500,7 @@ document.querySelectorAll('.curve-btn').forEach(btn => {
 document.querySelectorAll('.hc').forEach(btn => {
   const getDeck = () => btn.dataset.deck === 'A' ? deckA : deckB;
   const slot = parseInt(btn.dataset.slot);
-  btn.addEventListener('click', (e) => handleHotcue(getDeck(), slot, e.shiftKey));
+  btn.addEventListener('click', (e) => { handleHotcue(getDeck(), slot, e.shiftKey); cueMotion(btn, 'cue-press'); });
   btn.addEventListener('contextmenu', (e) => { e.preventDefault(); handleHotcue(getDeck(), slot, true); });
 });
 
@@ -2504,6 +2514,7 @@ document.querySelectorAll('.rollpads .lp').forEach(btn => {
     setActiveDivision(getDeck(), div);    // 누른 박자 = 활성(스페이스바 공유)
     btn.classList.add('rolling');
     rollOn(getDeck(), div);
+    cueMotion(btn, 'cue-press');
   });
   const release = () => {
     if (!btn.classList.contains('rolling')) return;
@@ -2590,6 +2601,13 @@ window.addEventListener('keyup', (e) => {
 // ============================================================
 // 시각 업데이트 루프
 // ============================================================
+// 일회성 모션 큐 헬퍼 (UX tournament: 폴리시) — 매 프레임 JS 없음, animationend 자가정리
+function cueMotion(elm, cls) {
+  if (!elm) return;
+  elm.classList.remove(cls); void elm.offsetWidth;
+  elm.classList.add(cls);
+  elm.addEventListener('animationend', function h() { elm.classList.remove(cls); elm.removeEventListener('animationend', h); });
+}
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');   // UX audit: 영구 모션 게이트
 // 플래터 상태 HUD (UX tournament): 기존 플래그에서 파생 — 전이 시에만 attr 갱신 (idempotent, rAF 비용 무시가능)
 const PHUD_TXT = { play: '재생', idle: '정지', empty: '' };
