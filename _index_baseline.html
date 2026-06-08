@@ -1,0 +1,1973 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vinyl Scratch Engine — v0.3 dual deck</title>
+<style>
+  :root {
+    --bg: #0a0a0a;
+    --panel: #141414;
+    --line: #2a2a2a;
+    --accent: #ff5e3a;
+    --accentB: #3a9bff;
+    --text: #e8e8e8;
+    --dim: #777;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    user-select: none;
+    overflow-x: hidden;
+  }
+  .app {
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: 24px 18px 50px;
+  }
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 22px;
+  }
+  h1 {
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 3px;
+    margin: 0;
+    color: var(--dim);
+    text-transform: uppercase;
+  }
+  .ver { font-size: 11px; color: var(--dim); }
+
+  /* Visual beatmatching — 3밴드 컬러 웨이브폼 */
+  /* 줌 웨이브폼 (playhead 중앙 고정, 파형이 스크롤) */
+  .zoomwaves { margin: 4px 0 6px; display: flex; flex-direction: column; gap: 2px; position: relative; }
+  .zoomwave { width: 100%; height: 88px; background: #0a0a0a; border: 1px solid var(--line); border-radius: 4px; display: block; cursor: pointer; }
+  /* overview (전체) */
+  .waveforms { margin: 0 0 16px; display: flex; flex-direction: column; gap: 4px; }
+  .wave { width: 100%; height: 54px; background: #0c0c0c; border: 1px solid var(--line); border-radius: 4px; display: block; cursor: pointer; }
+
+  /* ===== 배틀 레이아웃: 플래터 좌우 + 믹서 중앙 ===== */
+  .rig {
+    display: grid;
+    grid-template-columns: 1fr 340px 1fr;
+    gap: 18px;
+    align-items: start;
+  }
+  @media (max-width: 1000px) {
+    .rig { grid-template-columns: 1fr; }
+    .mixer-center { order: 3; }
+  }
+  .deck-side {
+    background: none;
+    border: none;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .deck-side .platter-wrap { margin: 0 auto 16px; }
+  .deck-side .file-zone, .deck-side .controls, .deck-side .pitch-row, .deck-side .bpm-row, .deck-side .stretch-row { margin: 8px 0 0; }
+  .deck-head { margin-bottom: 12px; }
+  .deck-tag {
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--dim);
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+  .deck-side[data-deck="B"] .deck-tag { color: var(--accentB); }
+  .deck-side[data-deck="A"] .deck-tag { color: var(--accent); }
+
+  .file-zone {
+    border: 1px dashed var(--line);
+    background: var(--panel);
+    padding: 14px;
+    border-radius: 4px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+    font-size: 12px;
+    color: var(--dim);
+    display: block;
+  }
+  .file-zone.has-file { border-color: var(--accent); color: var(--text); }
+  .file-zone.drag { border-color: var(--accent); background: #1a1612; }
+  .file-zone strong { color: var(--text); }
+  .file-zone .hint { font-size: 10px; opacity: .6; }
+  input[type=file] { display: none; }
+
+  .platter-wrap {
+    position: relative;
+    width: min(340px, 92%);
+    aspect-ratio: 1 / 1;
+    margin: 20px auto 16px;
+  }
+  .platter {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    position: relative;
+    cursor: grab;
+    background:
+      radial-gradient(circle at 50% 50%, #1a1a1a 0%, #1a1a1a 18%, #0c0c0c 19%, #181818 20%),
+      repeating-radial-gradient(circle at 50% 50%,
+        rgba(255,255,255,0.025) 0px,
+        rgba(255,255,255,0.025) 1px,
+        transparent 1px,
+        transparent 3px);
+    box-shadow:
+      0 0 0 2px #050505,
+      0 0 40px rgba(255,94,58,0.06),
+      inset 0 0 60px rgba(0,0,0,0.7);
+    overflow: hidden;
+    will-change: transform;
+  }
+  .platter:active { cursor: grabbing; }
+  .platter.scratching { cursor: grabbing; }
+
+  .label {
+    position: absolute;
+    width: 38%;
+    height: 38%;
+    top: 31%;
+    left: 31%;
+    border-radius: 50%;
+    background: radial-gradient(circle at 50% 40%, #d44 0%, #922 60%, #511 100%);
+    box-shadow:
+      inset 0 0 12px rgba(0,0,0,0.4),
+      0 2px 6px rgba(0,0,0,0.6);
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255,255,255,0.7);
+    font-size: 13px;
+    letter-spacing: 2px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+  .deck-side[data-deck="B"] .label {
+    background: radial-gradient(circle at 50% 40%, #48d 0%, #229 60%, #115 100%);
+  }
+  .spindle {
+    position: absolute;
+    width: 10px; height: 10px;
+    background: #000;
+    border-radius: 50%;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow: inset 0 0 3px rgba(255,255,255,0.4);
+    pointer-events: none;
+  }
+  .marker {
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 3px;
+    height: 47%;
+    background: linear-gradient(to top, transparent 0%, var(--accent) 80%, #fff 100%);
+    transform-origin: top center;
+    transform: translate(-50%, 0);   /* 회전은 platter 본체가 담당 */
+    pointer-events: none;
+    opacity: 0.9;
+  }
+  .deck-side[data-deck="B"] .marker {
+    background: linear-gradient(to top, transparent 0%, var(--accentB) 80%, #fff 100%);
+  }
+
+  /* 피치 / BPM 행 */
+  .pitch-row, .bpm-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 8px 2px;
+    font-size: 11px;
+  }
+  .pitch-row .tag, .bpm-row .tag {
+    font-size: 10px; letter-spacing: 1px; color: var(--dim);
+    text-transform: uppercase; width: 40px; flex: 0 0 auto;
+  }
+  .pitch-row input[type=range] {
+    flex: 1; -webkit-appearance: none; appearance: none;
+    height: 5px; border-radius: 3px; background: var(--line); outline: none;
+  }
+  .pitch-row input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none; width: 14px; height: 22px;
+    border-radius: 3px; background: #ddd; border: 1px solid #000; cursor: ew-resize;
+  }
+  .pitch-row input[type=range]::-moz-range-thumb {
+    width: 14px; height: 22px; border-radius: 3px; background: #ddd; border: 1px solid #000; cursor: ew-resize;
+  }
+  .pitch-val { font-family: "SF Mono", Consolas, monospace; width: 50px; text-align: right; flex: 0 0 auto; color: var(--text); }
+  .pitch-reset { padding: 4px 9px; font-size: 13px; flex: 0 0 auto; line-height: 1; }
+  .bpm-input {
+    width: 64px; background: var(--bg); color: var(--text); border: 1px solid var(--line);
+    border-radius: 3px; padding: 5px 6px; font-family: inherit; font-size: 11px; text-align: center;
+  }
+  .bpm-input::-webkit-outer-spin-button, .bpm-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .bpm-cur { font-family: "SF Mono", Consolas, monospace; color: var(--text); }
+  .bpm-row .hint { font-size: 10px; color: var(--dim); }
+
+  /* EQ / 볼륨 */
+  .eq-row { display: grid; gap: 6px; margin: 10px 2px 0; }
+  .eq-band { display: flex; align-items: center; gap: 8px; }
+  .eq-band .tag { width: 30px; font-size: 10px; color: var(--dim); text-transform: uppercase; flex: 0 0 auto; }
+  .eq-band input[type=range] { flex: 1; -webkit-appearance: none; appearance: none; height: 4px; border-radius: 2px; background: var(--line); outline: none; }
+  .eq-band input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 12px; height: 18px; border-radius: 2px; background: #ccc; border: 1px solid #000; cursor: ew-resize; }
+  .eq-band input[type=range]::-moz-range-thumb { width: 12px; height: 18px; border-radius: 2px; background: #ccc; border: 1px solid #000; cursor: ew-resize; }
+
+  .stretch-row { display: flex; align-items: center; gap: 8px; margin: 8px 2px 0; font-size: 11px; }
+  .stretch-row .tag { width: 50px; font-size: 10px; letter-spacing: 1px; color: var(--dim); text-transform: uppercase; flex: 0 0 auto; }
+  .st-btn { padding: 6px 10px; font-size: 10px; flex: 0 0 auto; }
+
+  .controls {
+    display: grid;
+    grid-template-columns: 1fr 1.2fr 1fr;
+    gap: 8px;
+    margin: 12px 0 14px;
+  }
+  button {
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--line);
+    padding: 11px 8px;
+    font-size: 11px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    cursor: pointer;
+    border-radius: 3px;
+    transition: all .12s;
+    font-family: inherit;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.active { background: var(--accent); color: #000; border-color: var(--accent); }
+  button.play { font-size: 13px; font-weight: 600; }
+
+  .info {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 12px;
+    padding: 12px;
+    background: var(--panel);
+    border-radius: 3px;
+    font-size: 11px;
+  }
+  .info > div { text-align: center; }
+  .info .lbl { color: var(--dim); letter-spacing: 1px; text-transform: uppercase; font-size: 10px; margin-bottom: 4px; }
+  .info .val { font-family: "SF Mono", Consolas, monospace; font-size: 14px; }
+
+  .progress {
+    height: 4px;
+    background: var(--panel);
+    margin-top: 12px;
+    border-radius: 2px;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+  }
+  .progress-bar {
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+    transition: width .05s linear;
+  }
+  .deck-side[data-deck="B"] .progress-bar { background: var(--accentB); }
+  .hc-marker { position: absolute; top: 0; width: 2px; height: 100%; background: #fff; opacity: 0.85; pointer-events: none; }
+
+  .hotcues { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
+  .hc { padding: 12px 2px; font-size: 11px; font-weight: 600; font-family: monospace; }
+  .hc.set { background: var(--accent); color: #000; border-color: var(--accent); }
+  .hc[data-deck="B"].set { background: var(--accentB); border-color: var(--accentB); }
+
+  .loops { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+  .lp { padding: 7px 2px; font-size: 9px; font-weight: 600; font-family: monospace; }
+  .lp[data-deck="A"].active { background: var(--accent); color: #000; border-color: var(--accent); }
+  .lp[data-deck="B"].active { background: var(--accentB); color: #000; border-color: var(--accentB); }
+  .loop-region { position: absolute; top: 0; height: 100%; background: rgba(255,255,255,0.18); pointer-events: none; display: none; }
+
+  /* ===== 중앙 믹서 ===== */
+  .mixer-center {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px 14px;
+  }
+  .mix-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 12px; align-items: start; }
+  .mix-row .ch { display: flex; flex-direction: column; gap: 6px; }
+  .mix-row > .controls, .mix-row > .pitch-row, .mix-row > .bpm-row, .mix-row > .stretch-row, .mix-row > .progress, .mix-row > .info { margin: 0; }
+  .mix-row .file-zone { padding: 9px 8px; font-size: 11px; }
+  .mix-row .info { padding: 8px; }
+  .mix-row .controls { grid-template-columns: 1fr 1.1fr 1fr; }
+  .mix-row .pitch-row .tag, .mix-row .bpm-row .tag, .mix-row .stretch-row .tag { width: 40px; }
+  .mix-cap { margin-bottom: 4px; }
+  .cap-a, .cap-b { text-align: center; font-size: 10px; letter-spacing: 2px; text-transform: uppercase; }
+  .cap-a { color: var(--accent); }
+  .cap-b { color: var(--accentB); }
+  .faders { display: flex; justify-content: space-around; align-items: flex-end; margin: 16px 0 8px; }
+  .vfader { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .vfader .tag { font-size: 10px; color: var(--dim); }
+  .vrange {
+    writing-mode: vertical-lr; direction: rtl;
+    -webkit-appearance: slider-vertical; appearance: slider-vertical;
+    width: 10px; height: 96px; background: var(--line); border-radius: 4px; outline: none; cursor: ns-resize;
+  }
+  .vrange::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 26px; height: 14px; border-radius: 3px; background: #e8e8e8; border: 1px solid #000; cursor: ns-resize; }
+  .vrange::-moz-range-thumb { width: 26px; height: 14px; border-radius: 3px; background: #e8e8e8; border: 1px solid #000; cursor: ns-resize; }
+  .crossfader-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .crossfader-row .deck-tag { font-size: 12px; }
+  .crossfader-row input[type=range] {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 6px;
+    border-radius: 3px;
+    background: linear-gradient(to right, var(--accent), #333 50%, var(--accentB));
+    outline: none;
+  }
+  .crossfader-row input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px; height: 28px;
+    border-radius: 4px;
+    background: #e8e8e8;
+    border: 1px solid #000;
+    cursor: ew-resize;
+  }
+  .crossfader-row input[type=range]::-moz-range-thumb {
+    width: 18px; height: 28px;
+    border-radius: 4px;
+    background: #e8e8e8;
+    border: 1px solid #000;
+    cursor: ew-resize;
+  }
+  .cf-label { text-align: center; font-size: 10px; color: var(--dim); letter-spacing: 1px; margin-top: 8px; text-transform: uppercase; }
+  .cf-keys { display: flex; justify-content: space-between; padding: 0 18px; margin-top: 7px; }
+  .cf-keys span {
+    font-family: monospace; font-size: 10px; color: var(--dim);
+    border: 1px solid var(--line); border-radius: 3px; padding: 1px 7px; background: var(--bg);
+  }
+  .cf-curve { display: flex; gap: 6px; justify-content: center; margin-top: 12px; }
+  .curve-btn { padding: 7px 14px; font-size: 10px; }
+  .mixer-controls { display: flex; justify-content: center; margin-top: 12px; }
+  .mixer-controls button { flex: 0 0 auto; min-width: 160px; }
+
+  .help {
+    margin-top: 22px;
+    padding: 14px;
+    background: var(--panel);
+    border-radius: 3px;
+    font-size: 11px;
+    color: var(--dim);
+    line-height: 1.7;
+  }
+  .help kbd {
+    display: inline-block;
+    padding: 1px 6px;
+    background: #222;
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    font-family: monospace;
+    font-size: 10px;
+    color: var(--text);
+  }
+
+  /* 인트로 모달 */
+  .intro-overlay {
+    position: fixed; inset: 0; z-index: 1000;
+    background: rgba(0,0,0,0.9);
+    display: flex; align-items: center; justify-content: center;
+    backdrop-filter: blur(3px);
+  }
+  .intro-overlay.hidden { display: none; }
+  .intro-modal {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 36px 40px; max-width: 600px; margin: 20px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+  }
+  .intro-title { font-size: 20px; letter-spacing: 5px; color: var(--text); text-align: center; margin: 0; text-transform: uppercase; }
+  .intro-sub { text-align: center; color: var(--dim); font-size: 11px; letter-spacing: 2px; margin: 6px 0 24px; }
+  .intro-help { font-size: 12px; color: var(--dim); line-height: 2; }
+  .intro-help kbd { display: inline-block; padding: 1px 6px; background: #222; border: 1px solid var(--line); border-radius: 2px; font-family: monospace; font-size: 10px; color: var(--text); }
+  .intro-close { display: block; margin: 28px auto 0; padding: 12px 32px; background: var(--accent); color: #000; border: none; border-radius: 4px; font-size: 13px; font-weight: 600; letter-spacing: 1px; cursor: pointer; text-transform: uppercase; }
+  .intro-close:hover { opacity: 0.9; }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header>
+    <span class="ver">v0.3 · battle layout</span>
+  </header>
+
+  <div class="zoomwaves">
+    <canvas id="zoom_A" class="zoomwave"></canvas>
+    <canvas id="zoom_B" class="zoomwave"></canvas>
+  </div>
+  <div class="waveforms">
+    <canvas id="wave_A" class="wave"></canvas>
+    <canvas id="wave_B" class="wave"></canvas>
+  </div>
+
+  <div class="rig">
+    <!-- ===== 왼쪽: 덱 A 턴테이블 ===== -->
+    <section class="deck-side" data-deck="A">
+      <div class="platter-wrap">
+        <div class="platter" id="platter_A">
+          <div class="marker" id="marker_A"></div>
+          <div class="label">A</div>
+          <div class="spindle"></div>
+        </div>
+      </div>
+      <label class="file-zone" id="fileZone_A">
+        <span id="fileLabel_A">파일 ↓ / 클릭<br><span class="hint">mp3·wav·flac·mp4…</span></span>
+        <input type="file" id="fileInput_A" accept="audio/*,video/*,.mp4,.m4a,.mov,.webm,.mkv,.aac,.ogg">
+      </label>
+      <div class="controls">
+        <button id="cueBtn_A" disabled>Cue</button>
+        <button id="playBtn_A" class="play" disabled>▶ Play</button>
+        <button id="reverseBtn_A" disabled>Reverse</button>
+      </div>
+      <div class="pitch-row">
+        <span class="tag">Pitch</span>
+        <input type="range" id="pitch_A" min="0.5" max="1.5" step="0.001" value="1">
+        <span class="pitch-val" id="pitchVal_A">1.00x</span>
+        <button class="pitch-reset" id="pitchReset_A" title="피치 1.00x로 리셋">⟲</button>
+      </div>
+      <div class="bpm-row">
+        <span class="tag">BPM</span>
+        <input type="number" class="bpm-input" id="bpmBase_A" placeholder="원본" min="40" max="300" step="0.1">
+        <span class="hint">→</span>
+        <span class="bpm-cur" id="bpmCur_A">—</span>
+      </div>
+      <div class="stretch-row">
+        <span class="tag">Stretch</span>
+        <input type="number" class="bpm-input" id="stretchBpm_A" placeholder="목표BPM" min="40" max="300" step="0.1">
+        <button class="st-btn" id="stretchApply_A">Apply</button>
+        <button class="st-btn" id="stretchReset_A" title="원본 복원">↺</button>
+      </div>
+    </section>
+
+    <!-- ===== 중앙: 믹서 ===== -->
+    <section class="mixer-center">
+      <div class="mix-row mix-cap">
+        <div class="cap-a">Deck A · EQ</div>
+        <div class="cap-b">Deck B · EQ</div>
+      </div>
+      <div class="mix-row">
+        <div class="ch" data-deck="A">
+          <div class="eq-band"><span class="tag">Hi</span><input type="range" id="eqHigh_A" min="-26" max="26" step="1" value="0"></div>
+          <div class="eq-band"><span class="tag">Mid</span><input type="range" id="eqMid_A" min="-26" max="26" step="1" value="0"></div>
+          <div class="eq-band"><span class="tag">Low</span><input type="range" id="eqLow_A" min="-26" max="26" step="1" value="0"></div>
+        </div>
+        <div class="ch" data-deck="B">
+          <div class="eq-band"><span class="tag">Hi</span><input type="range" id="eqHigh_B" min="-26" max="26" step="1" value="0"></div>
+          <div class="eq-band"><span class="tag">Mid</span><input type="range" id="eqMid_B" min="-26" max="26" step="1" value="0"></div>
+          <div class="eq-band"><span class="tag">Low</span><input type="range" id="eqLow_B" min="-26" max="26" step="1" value="0"></div>
+        </div>
+      </div>
+      <div class="mix-row">
+        <div class="hotcues" data-deck="A">
+          <button class="hc" data-deck="A" data-slot="0">A</button>
+          <button class="hc" data-deck="A" data-slot="1">S</button>
+          <button class="hc" data-deck="A" data-slot="2">D</button>
+          <button class="hc" data-deck="A" data-slot="3">F</button>
+        </div>
+        <div class="hotcues" data-deck="B">
+          <button class="hc" data-deck="B" data-slot="0">Z</button>
+          <button class="hc" data-deck="B" data-slot="1">X</button>
+          <button class="hc" data-deck="B" data-slot="2">C</button>
+          <button class="hc" data-deck="B" data-slot="3">V</button>
+        </div>
+      </div>
+      <div class="mix-row">
+        <div class="loops" data-deck="A">
+          <button class="lp" data-deck="A" data-act="in">In</button>
+          <button class="lp" data-deck="A" data-act="out">Out</button>
+          <button class="lp" data-deck="A" data-act="exit">Exit</button>
+          <button class="lp" data-deck="A" data-act="beat" data-beats="1">1</button>
+          <button class="lp" data-deck="A" data-act="beat" data-beats="2">2</button>
+          <button class="lp" data-deck="A" data-act="beat" data-beats="4">4</button>
+        </div>
+        <div class="loops" data-deck="B">
+          <button class="lp" data-deck="B" data-act="in">In</button>
+          <button class="lp" data-deck="B" data-act="out">Out</button>
+          <button class="lp" data-deck="B" data-act="exit">Exit</button>
+          <button class="lp" data-deck="B" data-act="beat" data-beats="1">1</button>
+          <button class="lp" data-deck="B" data-act="beat" data-beats="2">2</button>
+          <button class="lp" data-deck="B" data-act="beat" data-beats="4">4</button>
+        </div>
+      </div>
+      <div class="mix-row">
+        <div class="progress" id="progress_A"><div class="progress-bar" id="progressBar_A"></div><div class="loop-region" id="loopRegion_A"></div><div class="hc-markers" id="hcMarkers_A"></div></div>
+        <div class="progress" id="progress_B"><div class="progress-bar" id="progressBar_B"></div><div class="loop-region" id="loopRegion_B"></div><div class="hc-markers" id="hcMarkers_B"></div></div>
+      </div>
+      <div class="mix-row">
+        <div class="info">
+          <div><div class="lbl">Pos</div><div class="val" id="posVal_A">0:00 / 0:00</div></div>
+          <div><div class="lbl">Speed</div><div class="val" id="speedVal_A">0.00x</div></div>
+        </div>
+        <div class="info">
+          <div><div class="lbl">Pos</div><div class="val" id="posVal_B">0:00 / 0:00</div></div>
+          <div><div class="lbl">Speed</div><div class="val" id="speedVal_B">0.00x</div></div>
+        </div>
+      </div>
+      <div class="faders">
+        <div class="vfader"><input type="range" id="vol_A" class="vrange" min="0" max="1.2" step="0.01" value="1"><span class="tag">A</span></div>
+        <div class="vfader"><input type="range" id="vol_B" class="vrange" min="0" max="1.2" step="0.01" value="1"><span class="tag">B</span></div>
+      </div>
+      <div class="crossfader-row">
+        <span class="deck-tag">A</span>
+        <input type="range" id="crossfader" min="0" max="1" step="0.001" value="0.5">
+        <span class="deck-tag">B</span>
+      </div>
+      <div class="cf-keys"><span>Q</span><span>W</span><span>E</span></div>
+      <div class="cf-curve">
+        <button class="curve-btn active" data-curve="smooth">Smooth</button>
+        <button class="curve-btn" data-curve="linear">Linear</button>
+        <button class="curve-btn" data-curve="sharp">Sharp</button>
+      </div>
+      <div class="mixer-controls">
+        <button id="aaBtn" class="active">Anti-Alias: ON</button>
+      </div>
+    </section>
+
+    <!-- ===== 오른쪽: 덱 B 턴테이블 ===== -->
+    <section class="deck-side" data-deck="B">
+      <div class="platter-wrap">
+        <div class="platter" id="platter_B">
+          <div class="marker" id="marker_B"></div>
+          <div class="label">B</div>
+          <div class="spindle"></div>
+        </div>
+      </div>
+      <label class="file-zone" id="fileZone_B">
+        <span id="fileLabel_B">파일 ↓ / 클릭<br><span class="hint">mp3·wav·flac·mp4…</span></span>
+        <input type="file" id="fileInput_B" accept="audio/*,video/*,.mp4,.m4a,.mov,.webm,.mkv,.aac,.ogg">
+      </label>
+      <div class="controls">
+        <button id="cueBtn_B" disabled>Cue</button>
+        <button id="playBtn_B" class="play" disabled>▶ Play</button>
+        <button id="reverseBtn_B" disabled>Reverse</button>
+      </div>
+      <div class="pitch-row">
+        <span class="tag">Pitch</span>
+        <input type="range" id="pitch_B" min="0.5" max="1.5" step="0.001" value="1">
+        <span class="pitch-val" id="pitchVal_B">1.00x</span>
+        <button class="pitch-reset" id="pitchReset_B" title="피치 1.00x로 리셋">⟲</button>
+      </div>
+      <div class="bpm-row">
+        <span class="tag">BPM</span>
+        <input type="number" class="bpm-input" id="bpmBase_B" placeholder="원본" min="40" max="300" step="0.1">
+        <span class="hint">→</span>
+        <span class="bpm-cur" id="bpmCur_B">—</span>
+      </div>
+      <div class="stretch-row">
+        <span class="tag">Stretch</span>
+        <input type="number" class="bpm-input" id="stretchBpm_B" placeholder="목표BPM" min="40" max="300" step="0.1">
+        <button class="st-btn" id="stretchApply_B">Apply</button>
+        <button class="st-btn" id="stretchReset_B" title="원본 복원">↺</button>
+      </div>
+    </section>
+  </div>
+
+</div>
+
+<!-- 인트로 모달 (최초 렌더링 시 1회 표시) -->
+<div class="intro-overlay" id="introOverlay">
+  <div class="intro-modal">
+    <h1 class="intro-title">Vinyl Scratch Engine</h1>
+    <p class="intro-sub">v0.3 · battle layout</p>
+    <div class="intro-help">
+      <strong style="color:var(--text);">조작법</strong><br>
+      • <kbd>Platter 드래그</kbd> — 스크래치 · <kbd>손 놓기</kbd> 관성 복귀<br>
+      • <kbd>Pitch</kbd> 속도 ±50% · <kbd>BPM</kbd> 원본 입력 · <kbd>Stretch</kbd> 음정유지 템포변경(Apply)<br>
+      • <kbd>Crossfader</kbd> A↔B 믹싱 · 커브 Smooth/Linear/Sharp<br>
+      • <kbd>Q W E</kbd> 크로스페이더 A·중앙·B · 홀딩+단타로 크랩 (예: Q홀드+E연타)<br>
+      • <kbd>R</kbd> 양 덱 재생/정지 토글 · <kbd>Space</kbd> 홀딩 = 1/8 롤(떼면 시간 복구)<br>
+      • <kbd>A S D F</kbd> / <kbd>Z X C V</kbd> 덱 A/B 핫큐 (빈칸=저장·채움=점프·Shift=삭제)<br>
+      • 상단 <kbd>웨이브폼</kbd> 색 = 주파수 대역(Low/Mid/High)으로 비트매칭
+    </div>
+    <button class="intro-close" id="introClose">시작하기 →</button>
+  </div>
+</div>
+
+<!-- SoundTouchJS v0.3.0 (LGPL-2.1) — 오프라인 타임스트레치용 -->
+<script src="soundtouch.js"></script>
+<script>
+// ============================================================
+// AudioWorklet processor (인라인 — Blob URL로 등록)
+// ============================================================
+const PROCESSOR_CODE = `
+const AA_K = 1.4142135623730951;   // 1/Q (Q=0.7071, Butterworth) — anti-alias SVF
+class ScratchProcessor extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.channels = null;        // Float32Array[]
+    this.bufferLen = 0;
+    this.sampleRate = sampleRate;
+
+    this.position = 0;           // 현재 재생 위치 (sample 단위, float)
+    this.velocity = 0;           // 현재 속도 (1.0 = 정상)
+    this.targetVelocity = 0;     // 목표 속도
+    this.smoothing = 0.0;        // 0=즉시, 1=불변
+
+    this.playing = false;
+    this.scratching = false;
+    this.direction = 1;          // 1 또는 -1 (reverse)
+    this.rate = 1;               // 피치/속도 배율 (1.0 = 원속)
+    this.loopStart = -1;
+    this.loopEnd = -1;
+    this.loopOn = false;
+    this.rollOn = false;
+    this.rollStart = -1;
+    this.rollEnd = -1;
+    this.rollShadow = 0;        // 롤 중 "루프 안 했다면" 가상 위치
+    this.frameCounter = 0;
+
+    // 적응형 anti-aliasing (속도>1일 때 가변 cutoff SVF lowpass)
+    this.aaEnabled = true;
+    this._piOverSr = Math.PI / this.sampleRate;
+    this.aaIc1 = new Float32Array(4);  // SVF 적분기 상태 [ch0 s0, ch0 s1, ch1 s0, ch1 s1]
+    this.aaIc2 = new Float32Array(4);
+
+    // declick 게인 엔벨로프 (재생/정지/점프 시 클릭 방지)
+    this.gain = 0;
+    this.targetGain = 0;
+    this.pendingSeek = -1;        // >=0 이면 그 위치로 declick 점프 대기
+    this._gainStep = 1 / (0.005 * this.sampleRate);  // ~5ms fade
+
+    this.port.onmessage = (e) => {
+      const d = e.data;
+      switch (d.type) {
+        case 'load':
+          this.channels = d.channels;
+          this.bufferLen = d.channels[0].length;
+          this.position = 0;
+          this.velocity = 0;
+          this.targetVelocity = 0;
+          this.gain = 0;
+          this.targetGain = 0;
+          this.pendingSeek = -1;
+          break;
+        case 'play':
+          this.playing = d.value;
+          if (!this.scratching) {
+            this.targetVelocity = this.playing ? this.direction * this.rate : 0;
+            this.smoothing = 0.0;
+          }
+          break;
+        case 'reverse':
+          this.direction = d.value ? -1 : 1;
+          if (this.playing && !this.scratching) {
+            this.targetVelocity = this.direction * this.rate;
+          }
+          break;
+        case 'rate':
+          this.rate = d.value;
+          if (this.playing && !this.scratching) {
+            this.targetVelocity = this.direction * this.rate;
+          }
+          break;
+        case 'cue':
+          this.pendingSeek = 0;     // 처음으로 declick 점프
+          break;
+        case 'seek':
+          this.pendingSeek = Math.max(0, Math.min(this.bufferLen - 1, d.value));
+          break;
+        case 'scratch-start':
+          this.scratching = true;
+          this.targetVelocity = 0;
+          this.velocity = 0;
+          this.smoothing = d.smoothing ?? 0.997;
+          break;
+        case 'scratch-velocity':
+          // 사용자가 jog 회전 중. velocity 직접 설정
+          this.targetVelocity = d.value;
+          // 디폴트로 미세 smoothing (~7ms tau @48k) — 분필 드르륵 방지
+          this.smoothing = d.smoothing ?? 0.997;
+          break;
+        case 'scratch-end':
+          this.scratching = false;
+          this.targetVelocity = this.playing ? this.direction * this.rate : 0;
+          this.smoothing = d.smoothing ?? 0.0;
+          break;
+        case 'aa':
+          this.aaEnabled = d.value;
+          break;
+        case 'loop':
+          if (d.on) { this.loopStart = d.start; this.loopEnd = d.end; this.loopOn = true; }
+          else { this.loopOn = false; }
+          break;
+        case 'roll':
+          if (d.on) {
+            this.rollEnd = this.position;
+            this.rollStart = Math.max(0, this.position - d.len);   // 직전 구간
+            this.rollShadow = this.position;
+            this.rollOn = true;
+            this.position = this.rollStart;
+          } else if (this.rollOn) {
+            this.position = Math.min(this.bufferLen - 1, this.rollShadow);  // 시간 복구
+            this.rollOn = false;
+          }
+          break;
+      }
+    };
+  }
+
+  process(inputs, outputs) {
+    const out = outputs[0];
+    if (!this.channels || this.bufferLen === 0) {
+      // 무음 출력
+      for (let ch = 0; ch < out.length; ch++) out[ch].fill(0);
+      return true;
+    }
+
+    const numCh = out.length;
+    const numSamples = out[0].length;
+    const srcChCount = this.channels.length;
+    const len = this.bufferLen;
+    const smooth = this.smoothing;
+    const lenM1 = len - 1;
+
+    for (let i = 0; i < numSamples; i++) {
+      // 속도 smoothing (1-pole IIR — 매 샘플마다 적용)
+      this.velocity = this.velocity * smooth + this.targetVelocity * (1 - smooth);
+      const speed = this.velocity < 0 ? -this.velocity : this.velocity;
+
+      // declick 게인 엔벨로프 (재생/정지/점프 시 振幅 불연속 → 클릭 방지)
+      const wantSound = (this.playing || this.scratching || speed > 0.001) && this.pendingSeek < 0;
+      this.targetGain = wantSound ? 1 : 0;
+      if (this.gain < this.targetGain) {
+        this.gain += this._gainStep;
+        if (this.gain > this.targetGain) this.gain = this.targetGain;
+      } else if (this.gain > this.targetGain) {
+        this.gain -= this._gainStep;
+        if (this.gain < this.targetGain) this.gain = this.targetGain;
+      }
+      if (this.pendingSeek >= 0 && this.gain <= 0.0001) {
+        this.position = this.pendingSeek;
+        this.pendingSeek = -1;
+      }
+
+      // 적응형 anti-alias 계수 (속도>1일 때만, 채널 공통이라 샘플당 1회)
+      let aaMix = 0, aa_a1 = 0, aa_a2 = 0, aa_a3 = 0;
+      if (this.aaEnabled && speed > 1) {
+        let fc = (this.sampleRate * 0.5) / speed;     // 속도 비례 cutoff (2x → 0.25fs)
+        const maxFc = this.sampleRate * 0.45;
+        if (fc > maxFc) fc = maxFc;
+        const g = Math.tan(this._piOverSr * fc);
+        aa_a1 = 1 / (1 + g * (g + AA_K));
+        aa_a2 = g * aa_a1;
+        aa_a3 = g * aa_a2;
+        aaMix = speed - 1 > 1 ? 1 : speed - 1;        // 1→2배속서 dry→wet 크로스페이드
+      }
+
+      // Hermite 4-point 보간 재생
+      const pos = this.position;
+      const idx = pos < 0 ? 0 : (pos >= lenM1 ? lenM1 : Math.floor(pos));
+      const frac = pos - idx;
+      const i_1 = idx > 0 ? idx - 1 : 0;
+      const i1 = idx < lenM1 ? idx + 1 : lenM1;
+      const i2 = idx + 2 <= lenM1 ? idx + 2 : lenM1;
+
+      for (let ch = 0; ch < numCh; ch++) {
+        const src = this.channels[Math.min(ch, srcChCount - 1)];
+        const xm1 = src[i_1];
+        const x0 = src[idx];
+        const x1 = src[i1];
+        const x2 = src[i2];
+        const c1 = 0.5 * (x1 - xm1);
+        const c2 = xm1 - 2.5 * x0 + 2 * x1 - 0.5 * x2;
+        const c3 = 0.5 * (x2 - xm1) + 1.5 * (x0 - x1);
+        let sample = ((c3 * frac + c2) * frac + c1) * frac + x0;
+
+        // 2단 SVF lowpass로 alias 성분 제거 후 dry와 blend
+        if (aaMix > 0) {
+          const b = ch * 2;
+          let ic1 = this.aaIc1[b], ic2 = this.aaIc2[b];
+          let v3 = sample - ic2;
+          let v1 = aa_a1 * ic1 + aa_a2 * v3;
+          let v2 = ic2 + aa_a2 * ic1 + aa_a3 * v3;
+          this.aaIc1[b] = 2 * v1 - ic1;
+          this.aaIc2[b] = 2 * v2 - ic2;
+          const lp1 = v2;
+          ic1 = this.aaIc1[b + 1]; ic2 = this.aaIc2[b + 1];
+          v3 = lp1 - ic2;
+          v1 = aa_a1 * ic1 + aa_a2 * v3;
+          v2 = ic2 + aa_a2 * ic1 + aa_a3 * v3;
+          this.aaIc1[b + 1] = 2 * v1 - ic1;
+          this.aaIc2[b + 1] = 2 * v2 - ic2;
+          sample += (v2 - sample) * aaMix;
+        }
+        out[ch][i] = sample * this.gain;
+      }
+
+      this.position += this.velocity;
+
+      // 롤 wrap — 가상 위치(rollShadow)는 계속 전진하므로 떼면 시간 복구
+      if (this.rollOn && this.rollEnd > this.rollStart) {
+        this.rollShadow += this.velocity;
+        const rl = this.rollEnd - this.rollStart;
+        while (this.position >= this.rollEnd) this.position -= rl;
+        while (this.position < this.rollStart) this.position += rl;
+      } else if (this.loopOn && this.loopEnd > this.loopStart) {
+        const loopLen = this.loopEnd - this.loopStart;
+        while (this.position >= this.loopEnd) this.position -= loopLen;
+        while (this.position < this.loopStart) this.position += loopLen;
+      }
+
+      // 경계 처리
+      if (this.position < 0) {
+        this.position = 0;
+        if (this.velocity < 0) this.velocity = 0;
+      } else if (this.position >= len - 1) {
+        this.position = len - 1;
+        if (this.velocity > 0) {
+          this.velocity = 0;
+          this.targetVelocity = 0;
+          if (this.playing) {
+            this.playing = false;
+            this.port.postMessage({ type: 'ended' });
+          }
+        }
+      }
+    }
+
+    // 위치/속도 보고 (대략 60Hz)
+    this.frameCounter++;
+    if (this.frameCounter >= 4) {
+      this.frameCounter = 0;
+      this.port.postMessage({
+        type: 'state',
+        position: this.position,
+        velocity: this.velocity
+      });
+    }
+
+    return true;
+  }
+}
+registerProcessor('scratch-processor', ScratchProcessor);
+`;
+
+// ============================================================
+// AudioWorklet 미지원 환경용 fallback (ScriptProcessorNode)
+// ============================================================
+function createScriptProcessorFallback(ctx) {
+  const BUFFER_SIZE = 1024;
+  const node = ctx.createScriptProcessor(BUFFER_SIZE, 0, 2);
+
+  const s = {
+    channels: null,
+    bufferLen: 0,
+    position: 0,
+    velocity: 0,
+    targetVelocity: 0,
+    smoothing: 0,
+    playing: false,
+    scratching: false,
+    direction: 1,
+    rate: 1,
+    loopStart: -1,
+    loopEnd: -1,
+    loopOn: false,
+    rollOn: false,
+    rollStart: -1,
+    rollEnd: -1,
+    rollShadow: 0,
+    aaEnabled: true,
+    gain: 0,
+    targetGain: 0,
+    pendingSeek: -1
+  };
+
+  // 적응형 anti-aliasing 상태 (worklet과 동일 로직)
+  const AA_K = 1.4142135623730951;
+  const piOverSr = Math.PI / ctx.sampleRate;
+  const aaIc1 = new Float32Array(4);
+  const aaIc2 = new Float32Array(4);
+  const gainStep = 1 / (0.005 * ctx.sampleRate);  // ~5ms declick fade
+
+  let messageCallback = null;
+  let frameCounter = 0;
+
+  const handleMessage = (data) => {
+    switch (data.type) {
+      case 'load':
+        s.channels = data.channels;
+        s.bufferLen = data.channels[0].length;
+        s.position = 0;
+        s.velocity = 0;
+        s.targetVelocity = 0;
+        s.gain = 0;
+        s.targetGain = 0;
+        s.pendingSeek = -1;
+        break;
+      case 'play':
+        s.playing = data.value;
+        if (!s.scratching) {
+          s.targetVelocity = s.playing ? s.direction * s.rate : 0;
+          s.smoothing = 0.0;
+        }
+        break;
+      case 'reverse':
+        s.direction = data.value ? -1 : 1;
+        if (s.playing && !s.scratching) s.targetVelocity = s.direction * s.rate;
+        break;
+      case 'rate':
+        s.rate = data.value;
+        if (s.playing && !s.scratching) s.targetVelocity = s.direction * s.rate;
+        break;
+      case 'cue':
+        s.pendingSeek = 0;
+        break;
+      case 'seek':
+        s.pendingSeek = Math.max(0, Math.min(s.bufferLen - 1, data.value));
+        break;
+      case 'scratch-start':
+        s.scratching = true;
+        s.targetVelocity = 0;
+        s.velocity = 0;
+        s.smoothing = data.smoothing ?? 0.997;
+        break;
+      case 'scratch-velocity':
+        s.targetVelocity = data.value;
+        s.smoothing = data.smoothing ?? 0.997;
+        break;
+      case 'scratch-end':
+        s.scratching = false;
+        s.targetVelocity = s.playing ? s.direction * s.rate : 0;
+        s.smoothing = data.smoothing ?? 0.0;
+        break;
+      case 'aa':
+        s.aaEnabled = data.value;
+        break;
+      case 'loop':
+        if (data.on) { s.loopStart = data.start; s.loopEnd = data.end; s.loopOn = true; }
+        else { s.loopOn = false; }
+        break;
+      case 'roll':
+        if (data.on) {
+          s.rollEnd = s.position;
+          s.rollStart = Math.max(0, s.position - data.len);
+          s.rollShadow = s.position;
+          s.rollOn = true;
+          s.position = s.rollStart;
+        } else if (s.rollOn) {
+          s.position = Math.min(s.bufferLen - 1, s.rollShadow);
+          s.rollOn = false;
+        }
+        break;
+    }
+  };
+
+  node.onaudioprocess = (e) => {
+    const out = e.outputBuffer;
+    const numCh = out.numberOfChannels;
+    const numSamples = out.length;
+
+    if (!s.channels || s.bufferLen === 0) {
+      for (let ch = 0; ch < numCh; ch++) out.getChannelData(ch).fill(0);
+      return;
+    }
+
+    const len = s.bufferLen;
+    const lenM1 = len - 1;
+    const smooth = s.smoothing;
+    const srcChCount = s.channels.length;
+    const channelData = [];
+    for (let ch = 0; ch < numCh; ch++) channelData.push(out.getChannelData(ch));
+
+    for (let i = 0; i < numSamples; i++) {
+      s.velocity = s.velocity * smooth + s.targetVelocity * (1 - smooth);
+      const speed = s.velocity < 0 ? -s.velocity : s.velocity;
+
+      // declick 게인 엔벨로프
+      const wantSound = (s.playing || s.scratching || speed > 0.001) && s.pendingSeek < 0;
+      s.targetGain = wantSound ? 1 : 0;
+      if (s.gain < s.targetGain) {
+        s.gain += gainStep;
+        if (s.gain > s.targetGain) s.gain = s.targetGain;
+      } else if (s.gain > s.targetGain) {
+        s.gain -= gainStep;
+        if (s.gain < s.targetGain) s.gain = s.targetGain;
+      }
+      if (s.pendingSeek >= 0 && s.gain <= 0.0001) {
+        s.position = s.pendingSeek;
+        s.pendingSeek = -1;
+      }
+
+      // 적응형 anti-alias 계수 (속도>1일 때만)
+      let aaMix = 0, aa_a1 = 0, aa_a2 = 0, aa_a3 = 0;
+      if (s.aaEnabled && speed > 1) {
+        let fc = (ctx.sampleRate * 0.5) / speed;
+        const maxFc = ctx.sampleRate * 0.45;
+        if (fc > maxFc) fc = maxFc;
+        const g = Math.tan(piOverSr * fc);
+        aa_a1 = 1 / (1 + g * (g + AA_K));
+        aa_a2 = g * aa_a1;
+        aa_a3 = g * aa_a2;
+        aaMix = speed - 1 > 1 ? 1 : speed - 1;
+      }
+
+      // Hermite 4-point 보간
+      const pos = s.position;
+      const idx = pos < 0 ? 0 : (pos >= lenM1 ? lenM1 : Math.floor(pos));
+      const frac = pos - idx;
+      const i_1 = idx > 0 ? idx - 1 : 0;
+      const i1 = idx < lenM1 ? idx + 1 : lenM1;
+      const i2 = idx + 2 <= lenM1 ? idx + 2 : lenM1;
+
+      for (let ch = 0; ch < numCh; ch++) {
+        const src = s.channels[Math.min(ch, srcChCount - 1)];
+        const xm1 = src[i_1];
+        const x0 = src[idx];
+        const x1 = src[i1];
+        const x2 = src[i2];
+        const c1 = 0.5 * (x1 - xm1);
+        const c2 = xm1 - 2.5 * x0 + 2 * x1 - 0.5 * x2;
+        const c3 = 0.5 * (x2 - xm1) + 1.5 * (x0 - x1);
+        let sample = ((c3 * frac + c2) * frac + c1) * frac + x0;
+
+        if (aaMix > 0) {
+          const b = ch * 2;
+          let ic1 = aaIc1[b], ic2 = aaIc2[b];
+          let v3 = sample - ic2;
+          let v1 = aa_a1 * ic1 + aa_a2 * v3;
+          let v2 = ic2 + aa_a2 * ic1 + aa_a3 * v3;
+          aaIc1[b] = 2 * v1 - ic1;
+          aaIc2[b] = 2 * v2 - ic2;
+          const lp1 = v2;
+          ic1 = aaIc1[b + 1]; ic2 = aaIc2[b + 1];
+          v3 = lp1 - ic2;
+          v1 = aa_a1 * ic1 + aa_a2 * v3;
+          v2 = ic2 + aa_a2 * ic1 + aa_a3 * v3;
+          aaIc1[b + 1] = 2 * v1 - ic1;
+          aaIc2[b + 1] = 2 * v2 - ic2;
+          sample += (v2 - sample) * aaMix;
+        }
+        channelData[ch][i] = sample * s.gain;
+      }
+
+      s.position += s.velocity;
+
+      if (s.rollOn && s.rollEnd > s.rollStart) {
+        s.rollShadow += s.velocity;
+        const rl = s.rollEnd - s.rollStart;
+        while (s.position >= s.rollEnd) s.position -= rl;
+        while (s.position < s.rollStart) s.position += rl;
+      } else if (s.loopOn && s.loopEnd > s.loopStart) {
+        const loopLen = s.loopEnd - s.loopStart;
+        while (s.position >= s.loopEnd) s.position -= loopLen;
+        while (s.position < s.loopStart) s.position += loopLen;
+      }
+
+      if (s.position < 0) {
+        s.position = 0;
+        if (s.velocity < 0) s.velocity = 0;
+      } else if (s.position >= len - 1) {
+        s.position = len - 1;
+        if (s.velocity > 0) {
+          s.velocity = 0;
+          s.targetVelocity = 0;
+          if (s.playing) {
+            s.playing = false;
+            if (messageCallback) messageCallback({ data: { type: 'ended' } });
+          }
+        }
+      }
+    }
+
+    frameCounter++;
+    if (frameCounter >= 4) {
+      frameCounter = 0;
+      if (messageCallback) {
+        messageCallback({
+          data: { type: 'state', position: s.position, velocity: s.velocity }
+        });
+      }
+    }
+  };
+
+  // AudioWorkletNode와 동일한 인터페이스 흉내
+  node.port = {
+    postMessage: (data) => handleMessage(data),
+    set onmessage(cb) { messageCallback = cb; },
+    get onmessage() { return messageCallback; }
+  };
+
+  return node;
+}
+
+// ============================================================
+// 공유 오디오 컨텍스트 / 마스터 믹스
+// ============================================================
+const VINYL_SMOOTHING = 0.9997;   // 손 놓을 때 관성 (작을수록 빨리 멈춤). ~70ms tau @48k
+let audioCtx = null;
+let masterGain = null;
+let workletReady = false;
+let audioInitPromise = null;
+
+async function initAudio() {
+  if (audioInitPromise) return audioInitPromise;
+  audioInitPromise = (async () => {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = audioCtx.createGain();
+    masterGain.gain.value = 0.85;   // 두 덱 합산 클리핑 여유
+    masterGain.connect(audioCtx.destination);
+
+    const hasWorklet = audioCtx.audioWorklet
+      && typeof audioCtx.audioWorklet.addModule === 'function';
+    if (hasWorklet) {
+      try {
+        const blob = new Blob([PROCESSOR_CODE], { type: 'application/javascript' });
+        await audioCtx.audioWorklet.addModule(URL.createObjectURL(blob));
+        workletReady = true;
+        console.log('[engine] AudioWorklet 모드');
+      } catch (e) {
+        workletReady = false;
+        console.warn('[engine] AudioWorklet 로드 실패, ScriptProcessor fallback:', e);
+      }
+    } else {
+      workletReady = false;
+      console.log('[engine] AudioWorklet 미지원 → ScriptProcessor fallback 사용');
+    }
+  })();
+  return audioInitPromise;
+}
+
+function createScratchNode() {
+  if (workletReady) {
+    try {
+      return new AudioWorkletNode(audioCtx, 'scratch-processor', { outputChannelCount: [2] });
+    } catch (e) {
+      console.warn('[engine] worklet 노드 생성 실패, fallback 사용:', e);
+      return createScriptProcessorFallback(audioCtx);
+    }
+  }
+  return createScriptProcessorFallback(audioCtx);
+}
+
+// ============================================================
+// 크로스페이더 (커브 선택 가능)
+// ============================================================
+let crossfade = 0.5;        // 0 = A 100%, 1 = B 100% (현재 값)
+let cfTarget = 0.5;         // 키보드(QWER)가 설정하는 목표 위치
+let cfCurve = 'smooth';     // 'smooth' | 'linear' | 'sharp'
+let aaEnabled = true;
+
+// QWER → 크로스페이더 4포인트, 거리 비례 속도로 이동
+const CF_POINTS = { KeyQ: 0, KeyW: 0.5, KeyE: 1 };
+const CF_TAU = 0.03;        // 추종 시간상수(작을수록 빠름) — 먼 포인트일수록 초기 속도↑
+let cfKeyStack = [];        // 눌린 크로스페이더 키 스택: top=단타(우선), 아래=홀딩 앵커(낮은 통제) → 크랩
+
+function cfGains(t) {
+  if (cfCurve === 'linear') return [1 - t, t];
+  if (cfCurve === 'sharp') {
+    // tanh 급경사 — 페이더 조금만 움직여도 빠르게 컷 (스크래치 트랜스폼용)
+    const K = 12;
+    return [0.5 * (1 + Math.tanh((0.5 - t) * K)), 0.5 * (1 + Math.tanh((t - 0.5) * K))];
+  }
+  // smooth: equal-power (constant power)
+  return [Math.cos(t * Math.PI / 2), Math.sin(t * Math.PI / 2)];
+}
+function gainA() { return cfGains(crossfade)[0]; }
+function gainB() { return cfGains(crossfade)[1]; }
+function applyCrossfade() {
+  const g = cfGains(crossfade);
+  if (deckA.gainNode) deckA.gainNode.gain.value = g[0];
+  if (deckB.gainNode) deckB.gainNode.gain.value = g[1];
+}
+
+// ============================================================
+// 유틸
+// ============================================================
+function formatTime(sec) {
+  if (!isFinite(sec)) return '0:00';
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+// ============================================================
+// 핫큐 — 덱A: A S D F / 덱B: Z X C V (각 4슬롯)
+// ============================================================
+const HOTCUE_KEYS = {
+  KeyA: ['A', 0], KeyS: ['A', 1], KeyD: ['A', 2], KeyF: ['A', 3],
+  KeyZ: ['B', 0], KeyX: ['B', 1], KeyC: ['B', 2], KeyV: ['B', 3],
+};
+function handleHotcue(deck, slot, clear) {
+  if (!deck.buffer) return;
+  if (clear) {
+    deck.hotcues[slot] = null;
+  } else if (deck.hotcues[slot] == null) {
+    deck.hotcues[slot] = deck.curPos;        // 빈 슬롯 → 현재 위치 저장
+  } else {
+    deck.node.port.postMessage({ type: 'seek', value: deck.hotcues[slot] });  // declick 점프
+  }
+  updateHotcueUI(deck);
+}
+function updateHotcueUI(deck) {
+  for (let i = 0; i < 4; i++) {
+    deck.el.hcPads[i].classList.toggle('set', deck.hotcues[i] != null);
+  }
+  if (!deck.buffer) { deck.el.hcMarkers.innerHTML = ''; return; }
+  deck.el.hcMarkers.innerHTML = deck.hotcues
+    .map(pos => pos == null ? '' : `<span class="hc-marker" style="left:${(pos / deck.buffer.length) * 100}%"></span>`)
+    .join('');
+}
+
+// ============================================================
+// BPM 자동검출 (오프라인, onset envelope autocorrelation) — 베스트에포트
+// ============================================================
+function detectBPM(buffer) {
+  const sr = buffer.sampleRate;
+  const N = buffer.length;
+  if (N < sr * 4) return null;                 // 너무 짧으면 패스
+  const ch0 = buffer.getChannelData(0);
+  const ch1 = buffer.numberOfChannels > 1 ? buffer.getChannelData(1) : ch0;
+
+  // 5ms 윈도우 RMS 엔벨로프 (envelope rate ≈ 200Hz — lag 해상도↑)
+  const win = Math.max(1, Math.floor(sr * 0.005));
+  const envLen = Math.floor(N / win);
+  const env = new Float32Array(envLen);
+  for (let i = 0; i < envLen; i++) {
+    let sum = 0;
+    const start = i * win;
+    for (let j = 0; j < win; j++) {
+      const s = (ch0[start + j] + ch1[start + j]) * 0.5;
+      sum += s * s;
+    }
+    env[i] = Math.sqrt(sum / win);
+  }
+  // onset strength: 양의 차분 (에너지 증가 지점)
+  const onset = new Float32Array(envLen);
+  for (let i = 1; i < envLen; i++) {
+    const d = env[i] - env[i - 1];
+    onset[i] = d > 0 ? d : 0;
+  }
+  // autocorrelation으로 주기 탐색 (70~180 BPM 범위)
+  const envSr = sr / win;
+  const minLag = Math.floor(envSr * 60 / 180);
+  const maxLag = Math.ceil(envSr * 60 / 70);
+  const ac = new Float32Array(maxLag + 1);
+  for (let lag = minLag; lag <= maxLag; lag++) {
+    let sum = 0;
+    for (let i = lag; i < envLen; i++) sum += onset[i] * onset[i - lag];
+    ac[lag] = sum;
+  }
+  // comb(하모닉 합산): 비트 주기의 정수배 lag 에너지를 모아 기본 비트를 선택 → octave 절반오류 완화
+  let bestLag = minLag, bestScore = -1;
+  for (let lag = minLag; lag <= maxLag; lag++) {
+    let score = 0, cnt = 0;
+    for (let k = 1; k * lag <= maxLag; k++) { score += ac[k * lag]; cnt++; }
+    score /= cnt;                              // 하모닉 개수로 정규화 → 작은 lag 편향 제거
+    if (score > bestScore) { bestScore = score; bestLag = lag; }
+  }
+  if (bestScore <= 0) return null;
+  // parabolic interpolation으로 peak lag 정밀화 (envelope 양자화 오차 보정)
+  let refined = bestLag;
+  if (bestLag > minLag && bestLag < maxLag) {
+    const y0 = ac[bestLag - 1], y1 = ac[bestLag], y2 = ac[bestLag + 1];
+    const denom = y0 - 2 * y1 + y2;
+    if (denom !== 0) refined = bestLag + 0.5 * (y0 - y2) / denom;
+  }
+  // 검출 범위(70~180)가 1옥타브라 추가 octave-fold 없이 그대로 사용
+  const bpm = 60 * envSr / refined;
+  return Math.round(bpm * 10) / 10;
+}
+
+// ============================================================
+// 타임스트레치 (SoundTouchJS 오프라인 — 음정 유지, 템포만 변경)
+// ============================================================
+function timeStretch(buffer, tempoRatio) {
+  const sr = buffer.sampleRate;
+  const srcLen = buffer.length;
+  const nch = buffer.numberOfChannels;
+  const pad = Math.ceil(sr * 0.5);       // 끝부분 손실 보상용 무음 패딩 (lib에 flush 없음)
+
+  // 패딩된 소스: 원본 + 0.5초 무음
+  const padded = audioCtx.createBuffer(nch, srcLen + pad, sr);
+  for (let ch = 0; ch < nch; ch++) padded.copyToChannel(buffer.getChannelData(ch), ch);
+
+  const source = new WebAudioBufferSource(padded);
+  const st = new SoundTouch();
+  st.tempo = tempoRatio;                 // >1 빠름, <1 느림 (음정 보존)
+  const filter = new SimpleFilter(source, st);
+  const BUFF = 8192;
+  const samples = new Float32Array(BUFF * 2);
+  const left = [], right = [];
+  const cap = (srcLen + pad) * 2 + sr * 4;
+  let extracted;
+  while ((extracted = filter.extract(samples, BUFF)) > 0) {
+    for (let i = 0; i < extracted; i++) { left.push(samples[i * 2]); right.push(samples[i * 2 + 1]); }
+    if (left.length > cap) break;
+  }
+  // 실제 음악 길이만큼만 (패딩/latency 잔여 제거)
+  const wantLen = Math.min(left.length, Math.round(srcLen / tempoRatio));
+  const out = audioCtx.createBuffer(2, Math.max(1, wantLen), sr);
+  out.copyToChannel(Float32Array.from(left.slice(0, wantLen)), 0);
+  out.copyToChannel(Float32Array.from(right.slice(0, wantLen)), 1);
+  return out;
+}
+
+// ============================================================
+// 루프 (In/Out 수동 · 1·2·4 beat 자동 · Exit)
+// ============================================================
+function handleLoop(deck, act, beats) {
+  if (!deck.buffer) return;
+  if (act === 'in') {
+    deck.loopStart = deck.curPos;
+  } else if (act === 'out') {
+    if (deck.loopStart >= 0 && deck.curPos > deck.loopStart) {
+      deck.loopEnd = deck.curPos;
+      deck.loopOn = true;
+      deck.node.port.postMessage({ type: 'loop', start: deck.loopStart, end: deck.loopEnd, on: true });
+    }
+  } else if (act === 'beat') {
+    if (!deck.baseBpm) return;                       // BPM 없으면 비트 루프 불가
+    const spb = deck.buffer.sampleRate * 60 / deck.baseBpm;
+    deck.loopStart = deck.curPos;
+    deck.loopEnd = Math.min(deck.curPos + beats * spb, deck.buffer.length - 1);
+    deck.loopOn = true;
+    deck.node.port.postMessage({ type: 'loop', start: deck.loopStart, end: deck.loopEnd, on: true });
+  } else if (act === 'exit') {
+    deck.loopOn = false;
+    deck.node.port.postMessage({ type: 'loop', on: false });
+  }
+  updateLoopUI(deck);
+}
+function updateLoopUI(deck) {
+  if (deck.el.loopExit) deck.el.loopExit.classList.toggle('active', deck.loopOn);
+  const r = deck.el.loopRegion;
+  if (deck.loopOn && deck.buffer) {
+    r.style.display = 'block';
+    r.style.left = (deck.loopStart / deck.buffer.length) * 100 + '%';
+    r.style.width = ((deck.loopEnd - deck.loopStart) / deck.buffer.length) * 100 + '%';
+  } else {
+    r.style.display = 'none';
+  }
+}
+
+// ============================================================
+// Visual beatmatching — 3밴드(Low/Mid/High) 컬러 웨이브폼
+// ============================================================
+function analyzeWaveform(buffer, bins) {
+  const ch0 = buffer.getChannelData(0);
+  const ch1 = buffer.numberOfChannels > 1 ? buffer.getChannelData(1) : ch0;
+  const N = buffer.length, sr = buffer.sampleRate;
+  const per = Math.max(1, Math.floor(N / bins));
+  const lowA = Math.exp(-2 * Math.PI * 200 / sr);   // ~200Hz 1-pole 저역
+  const out = new Array(bins);
+  let lp = 0, prev = 0, max = 1e-6;
+  for (let b = 0; b < bins; b++) {
+    let lo = 0, md = 0, hi = 0, n = 0;
+    const start = b * per, end = Math.min(N, start + per);
+    for (let i = start; i < end; i++) {
+      const s = (ch0[i] + ch1[i]) * 0.5;
+      lp = lp * lowA + s * (1 - lowA);   // 저역(킥)
+      const h = s - prev; prev = s;      // 고역(차분)
+      const m = s - lp - h;              // 중역(대략)
+      lo += lp * lp; md += m * m; hi += h * h; n++;
+    }
+    n = n || 1;
+    const L = Math.sqrt(lo / n), M = Math.sqrt(md / n), H = Math.sqrt(hi / n);
+    const T = L + M + H;
+    out[b] = { L, M, H, T };
+    if (T > max) max = T;
+  }
+  out.max = max;
+  return out;
+}
+function sizeCanvas(deck) {
+  [deck.el.canvas, deck.el.zoom].forEach(c => {
+    if (!c) return;
+    const w = Math.max(1, c.clientWidth), h = Math.max(1, c.clientHeight);
+    if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+  });
+}
+function drawWaveformCache(deck) {
+  const src = deck.waveData, c = deck.el.canvas;
+  if (!src || !c) return;
+  const w = c.width, h = c.height, mid = h / 2, max = src.max;
+  const off = deck.waveCache || (deck.waveCache = document.createElement('canvas'));
+  off.width = w; off.height = h;
+  const ctx = off.getContext('2d');
+  ctx.clearRect(0, 0, w, h);
+  for (let x = 0; x < w; x++) {
+    const d = src[Math.floor(x / w * src.length)];
+    if (!d) continue;
+    const amp = (d.T / max) * mid;
+    const t = d.T || 1e-6;
+    const r = Math.min(255, (d.L / t) * 360) | 0;
+    const g = Math.min(255, (d.M / t) * 360) | 0;
+    const b = Math.min(255, (d.H / t) * 360) | 0;
+    ctx.fillStyle = 'rgb(' + r + ',' + g + ',' + b + ')';
+    ctx.fillRect(x, mid - amp, 1, amp * 2 || 1);
+  }
+}
+function drawWave(deck) {
+  const c = deck.el.canvas;
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+  if (deck.waveCache) ctx.drawImage(deck.waveCache, 0, 0);
+  if (deck.buffer) {
+    const px = (deck.curPos / deck.buffer.length) * c.width;
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(px - 1, 0, 2, c.height);
+  }
+}
+// 줌뷰 — playhead 중앙 고정, 파형이 현재 위치 ±windowSec/2 만큼 스크롤
+const ZOOM_WINDOW_SEC = 4;
+function drawZoom(deck) {
+  const c = deck.el.zoom;
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  const w = c.width, h = c.height, mid = h / 2;
+  ctx.clearRect(0, 0, w, h);
+  if (deck.zoomData && deck.buffer) {
+    const zd = deck.zoomData, max = zd.max;
+    const binsPerSec = zd.length / deck.buffer.duration;
+    const t = deck.curPos / deck.buffer.sampleRate;
+    const secPerPx = ZOOM_WINDOW_SEC / w;
+    for (let x = 0; x < w; x++) {
+      const tx = t + (x - w / 2) * secPerPx;
+      if (tx < 0) continue;
+      const d = zd[Math.floor(tx * binsPerSec)];
+      if (!d) continue;
+      const amp = (d.T / max) * mid;
+      const tt = d.T || 1e-6;
+      const r = Math.min(255, (d.L / tt) * 360) | 0;
+      const g = Math.min(255, (d.M / tt) * 360) | 0;
+      const b = Math.min(255, (d.H / tt) * 360) | 0;
+      ctx.fillStyle = 'rgb(' + r + ',' + g + ',' + b + ')';
+      ctx.fillRect(x, mid - amp, 1, amp * 2 || 1);
+    }
+  }
+  // 중앙 고정 playhead
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  ctx.fillRect(w / 2 - 1, 0, 2, h);
+}
+function buildWaveform(deck) {
+  if (!deck.buffer || !deck.el.canvas) return;
+  deck.waveData = analyzeWaveform(deck.buffer, 1600);
+  deck.zoomData = analyzeWaveform(deck.buffer, Math.max(800, Math.floor(deck.buffer.duration * 100)));  // ~10ms/bin 고해상도
+  sizeCanvas(deck);
+  drawWaveformCache(deck);
+}
+
+// ============================================================
+// Deck factory — 덱 1개를 캡슐화
+// ============================================================
+function createDeck(id) {
+  const el = {
+    fileZone:    document.getElementById('fileZone_' + id),
+    fileLabel:   document.getElementById('fileLabel_' + id),
+    fileInput:   document.getElementById('fileInput_' + id),
+    platter:     document.getElementById('platter_' + id),
+    marker:      document.getElementById('marker_' + id),
+    pitch:       document.getElementById('pitch_' + id),
+    pitchVal:    document.getElementById('pitchVal_' + id),
+    pitchReset:  document.getElementById('pitchReset_' + id),
+    bpmBase:     document.getElementById('bpmBase_' + id),
+    bpmCur:      document.getElementById('bpmCur_' + id),
+    eqLow:       document.getElementById('eqLow_' + id),
+    eqMid:       document.getElementById('eqMid_' + id),
+    eqHigh:      document.getElementById('eqHigh_' + id),
+    vol:         document.getElementById('vol_' + id),
+    stretchBpm:   document.getElementById('stretchBpm_' + id),
+    stretchApply: document.getElementById('stretchApply_' + id),
+    stretchReset: document.getElementById('stretchReset_' + id),
+    playBtn:     document.getElementById('playBtn_' + id),
+    cueBtn:      document.getElementById('cueBtn_' + id),
+    reverseBtn:  document.getElementById('reverseBtn_' + id),
+    progress:    document.getElementById('progress_' + id),
+    progressBar: document.getElementById('progressBar_' + id),
+    hcMarkers:   document.getElementById('hcMarkers_' + id),
+    hcPads:      [0, 1, 2, 3].map(i => document.querySelector('.hc[data-deck="' + id + '"][data-slot="' + i + '"]')),
+    loopRegion:  document.getElementById('loopRegion_' + id),
+    loopExit:    document.querySelector('.lp[data-deck="' + id + '"][data-act="exit"]'),
+    posVal:      document.getElementById('posVal_' + id),
+    speedVal:    document.getElementById('speedVal_' + id),
+    canvas:      document.getElementById('wave_' + id),
+    zoom:        document.getElementById('zoom_' + id),
+  };
+
+  const deck = {
+    id, el,
+    node: null,
+    gainNode: null,
+    buffer: null,
+    duration: 0,
+    isPlaying: false,
+    isReversed: false,
+    rate: 1,
+    baseBpm: null,
+    originalBuffer: null,
+    originalBpm: null,
+    hotcues: [null, null, null, null],
+    loopStart: -1,
+    loopEnd: -1,
+    loopOn: false,
+    curPos: 0,
+    curVel: 0,
+    waveData: null,
+    waveCache: null,
+    zoomData: null,
+    dragging: false,
+    lastAngle: 0,
+    lastTime: 0,
+    visualAngle: 0,
+  };
+
+  function updateBpm() {
+    el.bpmCur.textContent = deck.baseBpm ? (deck.baseBpm * deck.rate).toFixed(1) + ' BPM' : '—';
+  }
+
+  // --- 오디오 노드 준비 (최초 로드 시) ---
+  async function ensureNode() {
+    await initAudio();
+    if (deck.node) return;
+    deck.node = createScratchNode();
+    // 3밴드 EQ (lowshelf → peaking → highshelf) + 볼륨 → 크로스페이드 → master
+    deck.eqLow = audioCtx.createBiquadFilter();  deck.eqLow.type = 'lowshelf';   deck.eqLow.frequency.value = 120;
+    deck.eqMid = audioCtx.createBiquadFilter();  deck.eqMid.type = 'peaking';    deck.eqMid.frequency.value = 1000; deck.eqMid.Q.value = 0.9;
+    deck.eqHigh = audioCtx.createBiquadFilter(); deck.eqHigh.type = 'highshelf'; deck.eqHigh.frequency.value = 3500;
+    deck.volume = audioCtx.createGain();
+    deck.gainNode = audioCtx.createGain();
+    deck.gainNode.gain.value = (id === 'A') ? gainA() : gainB();
+    deck.node.connect(deck.eqLow);
+    deck.eqLow.connect(deck.eqMid);
+    deck.eqMid.connect(deck.eqHigh);
+    deck.eqHigh.connect(deck.volume);
+    deck.volume.connect(deck.gainNode);
+    deck.gainNode.connect(masterGain);
+    deck.node.port.postMessage({ type: 'aa', value: aaEnabled });
+    deck.node.port.postMessage({ type: 'rate', value: deck.rate });
+    deck.node.port.onmessage = (e) => {
+      const d = e.data;
+      if (d.type === 'state') {
+        deck.curPos = d.position;
+        deck.curVel = d.velocity;
+      } else if (d.type === 'ended') {
+        deck.isPlaying = false;
+        el.playBtn.textContent = '▶ Play';
+      }
+    };
+  }
+
+  async function loadFile(file) {
+    try {
+      await ensureNode();
+      if (audioCtx.state === 'suspended') await audioCtx.resume();
+
+      el.fileLabel.textContent = `로딩 중… ${file.name}`;
+      const arrayBuf = await file.arrayBuffer();
+
+      let decoded;
+      try {
+        decoded = await audioCtx.decodeAudioData(arrayBuf);
+      } catch (decodeErr) {
+        console.error('decodeAudioData failed:', decodeErr);
+        el.fileLabel.innerHTML = `<span style="color:#ff5e3a;">디코딩 실패</span> — 이 브라우저가 <strong>${file.name}</strong>의 코덱을 지원하지 않습니다.<br><span class="hint">mp4는 AAC 오디오 트랙만 사용 가능.</span>`;
+        return;
+      }
+
+      deck.buffer = decoded;
+      deck.originalBuffer = decoded;
+      deck.duration = decoded.duration;
+
+      // BPM 자동검출 (베스트에포트 — 수동 입력으로 덮어쓸 수 있음)
+      const detected = detectBPM(decoded);
+      deck.originalBpm = detected;
+      if (detected) {
+        deck.baseBpm = detected;
+        el.bpmBase.value = detected;
+        el.stretchBpm.value = detected;
+        updateBpm();
+      }
+
+      const channels = [];
+      for (let ch = 0; ch < decoded.numberOfChannels; ch++) {
+        channels.push(decoded.getChannelData(ch).slice());
+      }
+      deck.node.port.postMessage({ type: 'load', channels }, channels.map(c => c.buffer));
+
+      el.fileLabel.innerHTML = `<strong>${file.name}</strong><br><span class="hint">${formatTime(deck.duration)} · ${decoded.numberOfChannels}ch · ${decoded.sampleRate}Hz</span>`;
+      el.fileZone.classList.add('has-file');
+      el.playBtn.disabled = false;
+      el.cueBtn.disabled = false;
+      el.reverseBtn.disabled = false;
+
+      deck.curPos = 0;
+      deck.isPlaying = false;
+      el.playBtn.textContent = '▶ Play';
+      deck.hotcues = [null, null, null, null];
+      updateHotcueUI(deck);
+      deck.loopOn = false; deck.loopStart = -1; deck.loopEnd = -1;
+      deck.node.port.postMessage({ type: 'loop', on: false });
+      updateLoopUI(deck);
+      buildWaveform(deck);
+    } catch (err) {
+      console.error('loadFile error:', err);
+      el.fileLabel.innerHTML = `<span style="color:#ff5e3a;">에러</span> — ${err.message || err}`;
+    }
+  }
+
+  function togglePlay() {
+    if (!deck.buffer) return;
+    deck.isPlaying = !deck.isPlaying;
+    deck.node.port.postMessage({ type: 'play', value: deck.isPlaying });
+    el.playBtn.textContent = deck.isPlaying ? '❚❚ Pause' : '▶ Play';
+  }
+  function cue() {
+    if (!deck.buffer) return;
+    deck.node.port.postMessage({ type: 'cue' });
+  }
+  function toggleReverse() {
+    if (!deck.buffer) return;
+    deck.isReversed = !deck.isReversed;
+    deck.node.port.postMessage({ type: 'reverse', value: deck.isReversed });
+    el.reverseBtn.classList.toggle('active', deck.isReversed);
+  }
+
+  // --- 피치 / BPM ---
+  el.pitch.addEventListener('input', () => {
+    deck.rate = parseFloat(el.pitch.value);
+    el.pitchVal.textContent = deck.rate.toFixed(2) + 'x';
+    if (deck.node) deck.node.port.postMessage({ type: 'rate', value: deck.rate });
+    updateBpm();
+  });
+  el.pitchReset.addEventListener('click', () => {
+    deck.rate = 1;
+    el.pitch.value = 1;
+    el.pitchVal.textContent = '1.00x';
+    if (deck.node) deck.node.port.postMessage({ type: 'rate', value: 1 });
+    updateBpm();
+  });
+  el.bpmBase.addEventListener('input', () => {
+    const v = parseFloat(el.bpmBase.value);
+    deck.baseBpm = (isFinite(v) && v > 0) ? v : null;
+    updateBpm();
+  });
+
+  // --- EQ / 볼륨 ---
+  el.eqLow.addEventListener('input', () => { if (deck.eqLow) deck.eqLow.gain.value = parseFloat(el.eqLow.value); });
+  el.eqMid.addEventListener('input', () => { if (deck.eqMid) deck.eqMid.gain.value = parseFloat(el.eqMid.value); });
+  el.eqHigh.addEventListener('input', () => { if (deck.eqHigh) deck.eqHigh.gain.value = parseFloat(el.eqHigh.value); });
+  el.vol.addEventListener('input', () => { if (deck.volume) deck.volume.gain.value = parseFloat(el.vol.value); });
+
+  // --- 타임스트레치 (오프라인 Apply: 원본 → 스트레치 buffer → 엔진 재로드) ---
+  function pushBuffer(buf) {
+    deck.buffer = buf;
+    deck.duration = buf.duration;
+    const channels = [];
+    for (let ch = 0; ch < buf.numberOfChannels; ch++) channels.push(buf.getChannelData(ch).slice());
+    deck.node.port.postMessage({ type: 'load', channels }, channels.map(c => c.buffer));
+    deck.curPos = 0;
+    deck.isPlaying = false;
+    el.playBtn.textContent = '▶ Play';
+    deck.hotcues = [null, null, null, null]; updateHotcueUI(deck);
+    deck.loopOn = false; deck.loopStart = -1; deck.loopEnd = -1;
+    deck.node.port.postMessage({ type: 'loop', on: false }); updateLoopUI(deck);
+    buildWaveform(deck);
+  }
+  el.stretchApply.addEventListener('click', async () => {
+    if (!deck.originalBuffer || !deck.originalBpm) return;
+    const target = parseFloat(el.stretchBpm.value);
+    if (!isFinite(target) || target <= 0) return;
+    const ratio = target / deck.originalBpm;          // 원본 BPM 기준 (누적 안 됨)
+    el.stretchApply.textContent = '…'; el.stretchApply.disabled = true;
+    await new Promise(r => setTimeout(r, 20));         // UI 갱신 양보
+    try {
+      pushBuffer(timeStretch(deck.originalBuffer, ratio));
+      deck.baseBpm = target;
+      el.bpmBase.value = Math.round(target * 10) / 10;
+      updateBpm();
+    } catch (e) { console.error('time-stretch failed:', e); }
+    el.stretchApply.textContent = 'Apply'; el.stretchApply.disabled = false;
+  });
+  el.stretchReset.addEventListener('click', () => {
+    if (!deck.originalBuffer) return;
+    pushBuffer(deck.originalBuffer);
+    deck.baseBpm = deck.originalBpm;
+    el.bpmBase.value = deck.originalBpm != null ? deck.originalBpm : '';
+    el.stretchBpm.value = deck.originalBpm != null ? deck.originalBpm : '';
+    updateBpm();
+  });
+
+  // --- platter 인터랙션 ---
+  el.platter.addEventListener('pointerdown', (e) => {
+    if (!deck.buffer) return;
+    e.preventDefault();
+    deck.dragging = true;
+    el.platter.classList.add('scratching');
+    const rect = el.platter.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
+    deck.lastAngle = Math.atan2(e.clientY - cy, e.clientX - cx);
+    deck.lastTime = performance.now();
+    deck.node.port.postMessage({ type: 'scratch-start' });
+    if (e.pointerId !== undefined) el.platter.setPointerCapture(e.pointerId);
+  });
+  el.platter.addEventListener('contextmenu', e => e.preventDefault());
+
+  function onMove(e) {
+    if (!deck.dragging) return;
+    const rect = el.platter.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
+    const events = (typeof e.getCoalescedEvents === 'function') ? e.getCoalescedEvents() : [e];
+
+    let totalDAngle = 0;
+    let endTime = deck.lastTime;
+    for (const ev of events) {
+      const t = ev.timeStamp || performance.now();
+      const angle = Math.atan2(ev.clientY - cy, ev.clientX - cx);
+      let dAng = angle - deck.lastAngle;
+      if (dAng > Math.PI) dAng -= 2 * Math.PI;
+      if (dAng < -Math.PI) dAng += 2 * Math.PI;
+      totalDAngle += dAng;
+      deck.lastAngle = angle;
+      endTime = t;
+    }
+    const dt = (endTime - deck.lastTime) / 1000;
+    if (dt > 0) {
+      const angularVel = totalDAngle / dt;
+      const playbackVel = (angularVel / (2 * Math.PI)) * 1.5;  // 1바퀴/초 = 1.5x
+      deck.node.port.postMessage({ type: 'scratch-velocity', value: playbackVel });
+      deck.visualAngle += totalDAngle * 180 / Math.PI;
+    }
+    deck.lastTime = endTime;
+  }
+  function onUp() {
+    if (!deck.dragging) return;
+    deck.dragging = false;
+    el.platter.classList.remove('scratching');
+    deck.node.port.postMessage({ type: 'scratch-end', smoothing: VINYL_SMOOTHING });
+  }
+  window.addEventListener('pointermove', onMove);
+  window.addEventListener('pointerup', onUp);
+  window.addEventListener('pointercancel', onUp);
+
+  // --- 파일 입력 (label이 input을 자동 트리거 → 별도 click 핸들러 없음: 이중 다이얼로그 버그 수정) ---
+  el.fileInput.addEventListener('change', (e) => {
+    if (e.target.files[0]) loadFile(e.target.files[0]);
+  });
+  ['dragenter', 'dragover'].forEach(ev =>
+    el.fileZone.addEventListener(ev, e => { e.preventDefault(); el.fileZone.classList.add('drag'); })
+  );
+  ['dragleave', 'drop'].forEach(ev =>
+    el.fileZone.addEventListener(ev, e => { e.preventDefault(); el.fileZone.classList.remove('drag'); })
+  );
+  el.fileZone.addEventListener('drop', e => {
+    e.preventDefault();
+    if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+  });
+
+  // --- 버튼 ---
+  el.playBtn.addEventListener('click', togglePlay);
+  el.cueBtn.addEventListener('click', cue);
+  el.reverseBtn.addEventListener('click', toggleReverse);
+  el.progress.addEventListener('click', (e) => {
+    if (!deck.buffer) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const ratio = (e.clientX - rect.left) / rect.width;
+    deck.node.port.postMessage({ type: 'seek', value: ratio * deck.buffer.length });
+  });
+  if (el.canvas) el.canvas.addEventListener('click', (e) => {
+    if (!deck.buffer) return;
+    const rect = el.canvas.getBoundingClientRect();
+    const ratio = (e.clientX - rect.left) / rect.width;
+    deck.node.port.postMessage({ type: 'seek', value: ratio * deck.buffer.length });
+  });
+  if (el.zoom) el.zoom.addEventListener('click', (e) => {
+    if (!deck.buffer) return;
+    const rect = el.zoom.getBoundingClientRect();
+    const secPerPx = 4 / rect.width;
+    const t = deck.curPos / deck.buffer.sampleRate;
+    const tx = t + ((e.clientX - rect.left) - rect.width / 2) * secPerPx;   // 중앙 기준
+    deck.node.port.postMessage({ type: 'seek', value: Math.max(0, tx * deck.buffer.sampleRate) });
+  });
+
+  return deck;
+}
+
+// ============================================================
+// 초기화
+// ============================================================
+const deckA = createDeck('A');
+const deckB = createDeck('B');
+
+// R 키 — 양 덱 동시 재생/정지 토글 (하나라도 재생 중이면 둘 다 정지, 아니면 둘 다 재생)
+function togglePlayBoth() {
+  const want = !(deckA.isPlaying || deckB.isPlaying);
+  [deckA, deckB].forEach(d => {
+    if (!d.buffer) return;
+    d.isPlaying = want;
+    d.node.port.postMessage({ type: 'play', value: want });
+    d.el.playBtn.textContent = want ? '❚❚ Pause' : '▶ Play';
+  });
+}
+
+// 스페이스바 — 1/8 비트 Loop Roll (홀딩 동안 직전 구간 반복, 떼면 시간 복구)
+function handleRoll(deck, on) {
+  if (!deck.buffer || !deck.node) return;
+  if (on) {
+    const bpm = deck.baseBpm || 120;
+    const len = (deck.buffer.sampleRate * 60 / bpm) / 8;   // 1/8 비트
+    deck.node.port.postMessage({ type: 'roll', on: true, len });
+  } else {
+    deck.node.port.postMessage({ type: 'roll', on: false });
+  }
+}
+function rollBoth(on) { handleRoll(deckA, on); handleRoll(deckB, on); }
+
+// 크로스페이더
+const crossfaderEl = document.getElementById('crossfader');
+crossfaderEl.addEventListener('input', () => {
+  crossfade = parseFloat(crossfaderEl.value);
+  cfTarget = crossfade;   // 마우스 조작이 우선 — 키 추종/홀딩 중단
+  cfKeyStack = [];
+  applyCrossfade();
+});
+
+// 크로스페이더 커브 선택
+document.querySelectorAll('.curve-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    cfCurve = btn.dataset.curve;
+    document.querySelectorAll('.curve-btn').forEach(b => b.classList.toggle('active', b === btn));
+    applyCrossfade();
+  });
+});
+
+// 핫큐 패드 클릭 (좌클릭=저장/점프, 우클릭·Shift클릭=삭제)
+document.querySelectorAll('.hc').forEach(btn => {
+  const getDeck = () => btn.dataset.deck === 'A' ? deckA : deckB;
+  const slot = parseInt(btn.dataset.slot);
+  btn.addEventListener('click', (e) => handleHotcue(getDeck(), slot, e.shiftKey));
+  btn.addEventListener('contextmenu', (e) => { e.preventDefault(); handleHotcue(getDeck(), slot, true); });
+});
+
+// 루프 버튼
+document.querySelectorAll('.lp').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const dk = btn.dataset.deck === 'A' ? deckA : deckB;
+    handleLoop(dk, btn.dataset.act, parseInt(btn.dataset.beats || '0'));
+  });
+});
+
+// Anti-Alias 토글 (양 덱 공통)
+const aaBtn = document.getElementById('aaBtn');
+aaBtn.addEventListener('click', () => {
+  aaEnabled = !aaEnabled;
+  aaBtn.textContent = `Anti-Alias: ${aaEnabled ? 'ON' : 'OFF'}`;
+  aaBtn.classList.toggle('active', aaEnabled);
+  [deckA, deckB].forEach(d => { if (d.node) d.node.port.postMessage({ type: 'aa', value: aaEnabled }); });
+});
+
+// 크로스페이더 키보드 (QWER → 4포인트, 거리 비례 속도로 이동)
+window.addEventListener('keydown', (e) => {
+  if (e.repeat) return;
+  const tag = e.target && e.target.tagName;
+  // 텍스트/숫자 입력칸(BPM 등) 타이핑 중에만 단축키 차단 — 슬라이더(range)·버튼은 허용
+  if (tag === 'TEXTAREA' || (tag === 'INPUT' && e.target.type !== 'range')) return;
+  if (e.code in CF_POINTS) {
+    e.preventDefault();
+    if (!cfKeyStack.includes(e.code)) cfKeyStack.push(e.code);   // 새로 누른 키가 top = 단타 우선
+    cfTarget = CF_POINTS[cfKeyStack[cfKeyStack.length - 1]];
+  } else if (e.code in HOTCUE_KEYS) {
+    e.preventDefault();
+    const [dk, slot] = HOTCUE_KEYS[e.code];
+    handleHotcue(dk === 'A' ? deckA : deckB, slot, e.shiftKey);
+  } else if (e.code === 'KeyR') {
+    e.preventDefault();
+    togglePlayBoth();
+  } else if (e.code === 'Space') {
+    e.preventDefault();
+    rollBoth(true);
+  }
+});
+
+// 크로스페이더 키 뗌 — 스택에서 빼고 남은 홀딩 앵커로 리턴 (크랩)
+window.addEventListener('keyup', (e) => {
+  if (e.code in CF_POINTS) {
+    const i = cfKeyStack.indexOf(e.code);
+    if (i >= 0) cfKeyStack.splice(i, 1);
+    if (cfKeyStack.length) cfTarget = CF_POINTS[cfKeyStack[cfKeyStack.length - 1]];
+    // 스택이 비면 cfTarget(마지막 위치)을 그대로 유지
+  } else if (e.code === 'Space') {
+    rollBoth(false);   // 롤 해제 → 가상 위치로 복구
+  }
+});
+
+// ============================================================
+// 시각 업데이트 루프
+// ============================================================
+function updateDeckVisual(deck, dt) {
+  if (!deck.buffer) return;
+  if (!deck.dragging) {
+    // 1x 재생 ≈ 240 deg/초 (1바퀴/초 = 1.5x 매핑의 역)
+    deck.visualAngle += deck.curVel * 240 * dt;
+  }
+  // 판 본체 회전 (marker·label·홈 패턴이 함께 회전)
+  deck.el.platter.style.transform = `rotate(${deck.visualAngle}deg)`;
+
+  const sr = deck.buffer.sampleRate;
+  deck.el.posVal.textContent = `${formatTime(deck.curPos / sr)} / ${formatTime(deck.duration)}`;
+  deck.el.speedVal.textContent = `${deck.curVel.toFixed(2)}x`;
+  deck.el.progressBar.style.width = `${(deck.curPos / deck.buffer.length) * 100}%`;
+}
+
+let lastFrameTime = performance.now();
+function animate() {
+  const now = performance.now();
+  const dt = (now - lastFrameTime) / 1000;
+  lastFrameTime = now;
+
+  // 크로스페이더 키 추종: 거리 비례 속도(지수 ease) → 먼 포인트일수록 빠르게 휙
+  if (crossfade !== cfTarget) {
+    if (Math.abs(cfTarget - crossfade) > 0.0005) {
+      crossfade += (cfTarget - crossfade) * (1 - Math.exp(-dt / CF_TAU));
+    } else {
+      crossfade = cfTarget;
+    }
+    crossfaderEl.value = crossfade;
+    applyCrossfade();
+  }
+
+  updateDeckVisual(deckA, dt);
+  updateDeckVisual(deckB, dt);
+  drawWave(deckA);
+  drawWave(deckB);
+  drawZoom(deckA);
+  drawZoom(deckB);
+  requestAnimationFrame(animate);
+}
+window.addEventListener('resize', () => {
+  [deckA, deckB].forEach(d => { if (d.waveData) { sizeCanvas(d); drawWaveformCache(d); } });
+});
+
+// 인트로 모달 — 한 번 본 뒤로는 표시 안 함(localStorage 기억)
+const introOverlay = document.getElementById('introOverlay');
+const introClose = document.getElementById('introClose');
+try { if (introOverlay && localStorage.getItem('vse_introSeen')) introOverlay.classList.add('hidden'); } catch (e) {}
+if (introClose) introClose.addEventListener('click', () => {
+  if (introOverlay) introOverlay.classList.add('hidden');
+  try { localStorage.setItem('vse_introSeen', '1'); } catch (e) {}
+});
+animate();
+</script>
+
+</body>
+</html>

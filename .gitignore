@@ -1,0 +1,24 @@
+# --- 세션/작업 상태 (프로젝트 코드 아님) ---
+.remember/
+
+# --- Claude Code 로컬 전용 설정 (launch.json은 추적 유지) ---
+.claude/settings.local.json
+.claude/*.local.json
+
+# --- 의존성 (지금은 없지만 향후 대비) ---
+node_modules/
+
+# --- 로그/임시 ---
+*.log
+*.tmp
+tmp/
+
+# --- OS / 에디터 잡파일 ---
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*~
