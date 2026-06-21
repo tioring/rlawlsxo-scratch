@@ -2238,7 +2238,8 @@ function createDeck(id) {
       if (playbackVel > 8) playbackVel = 8; else if (playbackVel < -8) playbackVel = -8;  // 빠른 플릭 sub-ms dt 스파이크 클램프
       deck.node.port.postMessage({ type: 'scratch-velocity', value: playbackVel });
       armIdleStop();
-      deck.visualAngle += totalDAngle * 180 / Math.PI;   // 시각은 실제 각도 1:1 (오디오만 클램프)
+      // 회전각은 updateDeckVisual에서 curPos로 일원화(단일 writer) — 여기서 따로 적분하면
+      // 손가락각(클램프 전)과 오디오 위치(클램프 후)가 갈라져 드리프트의 원인이 됨.
     }
     deck.lastTime = endTime;
   }
@@ -2730,9 +2731,13 @@ function setPlatterState(deck) {
 function updateDeckVisual(deck, dt) {
   setPlatterState(deck);   // 상태 HUD 동기
   if (!deck.buffer) return;
-  if (!deck.dragging && !reduceMotion.matches) {   // reduce-motion: 영구 회전 정지 (진행바·시간으로 재생 표시) — UX audit
-    // 1x 재생 ≈ 240 deg/초 (1바퀴/초 = 1.5x 매핑의 역)
-    deck.visualAngle += deck.curVel * 240 * dt;
+  // 회전각 = 오디오 실제 위치(curPos)의 순수 함수 → 음악과 기준바가 구조적으로 절대 어긋나지 않음.
+  //   (과거: 드래그=손가락각, 그 외=curVel·dt 를 메인스레드에서 따로 적분 → 워클릿 실제 전진량과
+  //    누적 오차로 드리프트. curPos는 워클릿이 보고하는 진짜 샘플 위치라 곧 음악 위치 자체.)
+  //   reduce-motion: 마지막 각 고정(회전 정지) — 진행바·시간으로 재생 표시 (UX audit).
+  if (!reduceMotion.matches) {
+    // 1x 재생 = 1초당 240°  (curPos/sr = 재생 경과초)
+    deck.visualAngle = (deck.curPos / deck.buffer.sampleRate) * 240;
   }
   // 판 본체 회전 (marker·label·홈 패턴이 함께 회전)
   deck.el.platter.style.transform = `rotate(${deck.visualAngle}deg)`;
