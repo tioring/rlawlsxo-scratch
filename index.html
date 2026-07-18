@@ -498,6 +498,17 @@
   .help-pin:active { filter: brightness(0.94); }
   @media (max-width: 560px) { .help-pin { width: 28px; height: 28px; } }
 
+  /* 자동 데모 버튼 (헤더) — help-pin 톤 매칭, 실행 중엔 accent 펄스 */
+  .demo-pin { height: 30px; padding: 0 12px; flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px; background: var(--metal-2); border: 1px solid var(--line); border-radius: 8px; color: var(--dim); font-family: "Barlow Semi Condensed", sans-serif; font-size: 11px; font-weight: 700; letter-spacing: 1.2px; cursor: pointer; text-transform: uppercase; transition: color .14s ease, border-color .14s ease, box-shadow .14s ease; white-space: nowrap; }
+  .demo-pin:hover { color: var(--accent); border-color: var(--accent); box-shadow: 0 0 0 1px rgba(255,216,58,0.18); }
+  .demo-pin.running { color: var(--accent); border-color: var(--accent); animation: demoPulse 1.2s ease-in-out infinite; }
+  @keyframes demoPulse { 0%,100% { box-shadow: 0 0 0 1px rgba(255,216,58,0.15); } 50% { box-shadow: 0 0 10px 2px rgba(255,216,58,0.35); } }
+  @media (max-width: 560px) { .demo-pin { height: 28px; padding: 0 9px; font-size: 10px; } }
+
+  /* 인트로 모달 보조 버튼 — 데모 먼저 보기 */
+  .intro-demo { display: block; margin: 8px auto 0; padding: 9px 26px; background: none; border: 1px solid var(--line); border-radius: 7px; color: var(--dim); font-family: "Barlow Semi Condensed", sans-serif; font-size: 12px; font-weight: 700; letter-spacing: 2px; cursor: pointer; text-transform: uppercase; transition: color .14s, border-color .14s; }
+  .intro-demo:hover { color: var(--accent); border-color: var(--accent); }
+
   /* ===== deck tabs (narrow only) ===== */
   .deck-tabs { display: none; }
 
@@ -588,6 +599,7 @@
     <div class="brand"><span class="bdot"></span>Vinyl Scratch Engine <small>STUDIO</small></div>
     <div class="header-right">
       <div class="sys">ENGINE <b id="engineMode">—</b> · DUAL DECK</div>
+      <button class="demo-pin" id="demoBtn" title="자동 데모 — Q-bert 샘플로 컨트롤 시연 (아무거나 조작하면 중단)">▶ 데모</button>
       <button class="help-pin" id="helpOpen" title="조작법 (단축키 ?)" aria-label="조작법 열기">?</button>
       <button class="set-gear" data-set="mixer" title="엔진 설정 — 크로스페이더 커브 · Anti-Alias">⚙</button>
     </div>
@@ -891,6 +903,7 @@
     </div>
     <p class="km-foot">웨이브폼 색 = 주파수 대역(Low · Mid · High) — 비트매칭 참고</p>
     <button class="intro-close" id="introClose">시작하기 →</button>
+    <button class="intro-demo" id="introDemo">▶ 자동 데모 먼저 보기</button>
   </div>
 </div>
 
@@ -2850,6 +2863,150 @@ function closeHelp() { if (introOverlay) introOverlay.classList.add('hidden'); t
 try { if (introOverlay && localStorage.getItem('vse_introSeen')) introOverlay.classList.add('hidden'); } catch (e) {}
 if (introClose) introClose.addEventListener('click', closeHelp);
 if (introX) introX.addEventListener('click', closeHelp);
+
+// ============================================================
+// 자동 데모 — 실제 컨트롤을 합성 이벤트로 시연 (엔진 코드 무접촉)
+// 조작 경로 자체를 재사용하므로 데모 = 진짜 사용 예시.
+// 사용자의 진짜 입력(e.isTrusted)이 오면 즉시 중단.
+// ============================================================
+const demoBtn = document.getElementById('demoBtn');
+const introDemo = document.getElementById('introDemo');
+let demoRun = null;   // { cancelled, held:Set } — null이면 미실행
+
+function demoCaption(title, msg) {
+  showToast({ id: 'demoCap', duration: 0, title, msg: msg || '', key: '데모' });
+}
+// setTimeout 기반 — rAF는 탭이 가려지면 정지해 데모가 얼어붙는다(검증 중 실측).
+// 취소는 각 대기 완료 시점에 판정 (최대 수백 ms 지연, 캡션은 stopDemo가 즉시 갱신).
+function demoWait(ms) {
+  return new Promise((res) => setTimeout(() => res(!!demoRun && !demoRun.cancelled), ms));
+}
+// MouseEvent로 pointer* 타입을 디스패치 — PointerEvent를 안 쓰는 이유:
+// pointerdown 핸들러의 setPointerCapture가 비활성 pointerId에 NotFoundError를 던진다.
+// MouseEvent엔 pointerId 프로퍼티가 없어 캡처 분기를 자연 우회 (핸들러는 clientX/Y·buttons만 읽음).
+function demoSynth(target, type, x, y, buttons) {
+  target.dispatchEvent(new MouseEvent(type, { clientX: x, clientY: y, buttons: buttons || 0, bubbles: true }));
+}
+function demoKey(type, code) {
+  window.dispatchEvent(new KeyboardEvent(type, { code, bubbles: true }));
+}
+// 플래터 원호 드래그: angFn(t초) → 12시 방향 기준 각도 오프셋(rad). 매 프레임 원주 좌표로 pointermove.
+async function demoScratch(deck, durMs, angFn) {
+  const pl = deck.el.platter;
+  const rect = pl.getBoundingClientRect();
+  const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
+  const r = rect.width * 0.36;
+  const pos = (a) => [cx + Math.cos(a) * r, cy + Math.sin(a) * r];
+  let [x, y] = pos(-Math.PI / 2 + angFn(0));
+  demoSynth(pl, 'pointerdown', x, y, 1);
+  const t0 = performance.now();
+  while (demoRun && !demoRun.cancelled) {
+    const t = (performance.now() - t0) / 1000;
+    if (t * 1000 >= durMs) break;
+    [x, y] = pos(-Math.PI / 2 + angFn(t));
+    demoSynth(window, 'pointermove', x, y, 1);
+    await new Promise((r) => setTimeout(r, 16));   // rAF 대신 — 가려진 탭에서도 진행
+  }
+  demoSynth(window, 'pointerup', x, y, 0);
+}
+
+async function runDemo() {
+  if (demoRun) { stopDemo('버튼으로 중단'); return; }
+  if (introOverlay && !introOverlay.classList.contains('hidden')) closeHelp();   // 인트로 열려있으면 키 가드에 막힘 → 먼저 닫기
+  demoRun = { cancelled: false, held: new Set() };
+  if (demoBtn) { demoBtn.classList.add('running'); demoBtn.textContent = '■ 중단'; }
+  try {
+    // 0) 샘플 로드 (비어있는 덱만 — 이미 로드된 트랙은 존중)
+    demoCaption('데모 시작', '샘플 로딩 — 아무거나 조작하면 데모가 멈춥니다');
+    if (!deckA.buffer) { const b = document.querySelector('.sample-row[data-deck="A"] .sample-btn[data-sample="1"]'); if (b) b.click(); }
+    if (!deckB.buffer) { const b = document.querySelector('.sample-row[data-deck="B"] .sample-btn[data-sample="3"]'); if (b) b.click(); }
+    const t0 = performance.now();
+    while ((!deckA.buffer || !deckB.buffer) && performance.now() - t0 < 20000) {
+      if (!await demoWait(200)) return;
+    }
+    if (!deckA.buffer || !deckB.buffer) { demoCaption('데모 중단', '샘플 로드가 안 끝났습니다 — 네트워크 확인 후 다시'); return; }
+
+    // 1) 재생
+    demoCaption('▶ 재생', 'Q-bert 샘플 두 덱 로드 완료 — 덱 A부터');
+    if (!deckA.isPlaying) document.getElementById('playBtn_A').click();
+    if (!await demoWait(1800)) return;
+
+    // 2) 플래터 스크래치 (vinyl 모드에서만 — precision은 Pointer Lock이라 시연 생략)
+    if (!deckA.precision) {
+      demoCaption('플래터 드래그 = 스크래치', '잡고 문지르기 — 베이비 스크래치');
+      await demoScratch(deckA, 3200, (t) => 0.55 * Math.sin(2 * Math.PI * 2.2 * t));
+      if (!demoRun || demoRun.cancelled) return;
+      if (!await demoWait(500)) return;
+      demoCaption('놓으면 관성', '세게 밀고 놓기 — 빙글');
+      await demoScratch(deckA, 700, (t) => 6 * t * t);
+      if (!demoRun || demoRun.cancelled) return;
+      if (!await demoWait(1500)) return;
+    }
+
+    // 3) 크로스페이더 컷 (Q/W/E 실제 단축키 경로)
+    demoCaption('크로스페이더 컷', 'Q = A쪽 · W = 중앙 · E = B쪽');
+    if (!deckB.isPlaying) document.getElementById('playBtn_B').click();
+    const cut = async (code, holdMs) => {
+      demoKey('keydown', code); demoRun.held.add(code);
+      const ok = await demoWait(holdMs);
+      demoKey('keyup', code); demoRun.held.delete(code);
+      return ok;
+    };
+    if (!await cut('KeyQ', 550)) return;
+    if (!await cut('KeyE', 550)) return;
+    if (!await cut('KeyQ', 300)) return;
+    if (!await cut('KeyE', 300)) return;
+    if (!await cut('KeyQ', 300)) return;
+    if (!await cut('KeyW', 700)) return;
+
+    // 4) 핫큐 (첫 누름 = 현재 위치 저장, 다음 = 점프백)
+    demoCaption('핫큐', 'A S D F = 덱 A 슬롯 · 지금 위치를 1번에 저장');
+    demoKey('keydown', 'KeyA'); demoKey('keyup', 'KeyA');
+    if (!await demoWait(1700)) return;
+    demoCaption('핫큐 점프', '다시 누르면 그 지점으로 — 리듬 컷');
+    demoKey('keydown', 'KeyA'); demoKey('keyup', 'KeyA');
+    if (!await demoWait(900)) return;
+    demoKey('keydown', 'KeyA'); demoKey('keyup', 'KeyA');
+    if (!await demoWait(1200)) return;
+
+    // 5) 비트 롤
+    demoCaption('비트 롤', 'Space 홀딩 — 구간 반복, 놓으면 원위치 복구');
+    demoKey('keydown', 'Space'); demoRun.held.add('Space');
+    const rollOk = await demoWait(1500);
+    demoKey('keyup', 'Space'); demoRun.held.delete('Space');
+    if (!rollOk) return;
+    if (!await demoWait(1000)) return;
+
+    // 6) 마무리 — 덱 A만 남기고 정리
+    demoCaption('이제 직접', '플래터를 잡아보세요 — 전체 조작법은 ? 버튼');
+    if (deckB.isPlaying) document.getElementById('playBtn_B').click();
+    await demoWait(2600);
+  } finally {
+    endDemo();
+  }
+}
+function endDemo() {
+  if (!demoRun) return;
+  demoRun.held.forEach((code) => demoKey('keyup', code));   // 홀딩 잔존 해제 (CF 스택·롤)
+  demoRun = null;
+  if (demoBtn) { demoBtn.classList.remove('running'); demoBtn.textContent = '▶ 데모'; }
+  setTimeout(() => dismissToast('demoCap'), 2400);
+}
+function stopDemo(why) {
+  if (!demoRun) return;
+  demoRun.cancelled = true;
+  demoCaption('데모 중단', why || '직접 조작 시작 — 즐기세요!');
+}
+// 진짜 사용자 입력 감지 → 즉시 중단 (합성 이벤트는 isTrusted=false라 안 걸림)
+['pointerdown', 'keydown', 'wheel'].forEach((ev) => {
+  window.addEventListener(ev, (e) => {
+    if (!demoRun || !e.isTrusted) return;
+    if (e.target && e.target.closest && e.target.closest('#demoBtn, #introDemo')) return;   // 토글 버튼은 자체 click 핸들러가 처리
+    stopDemo();
+  }, { capture: true });
+});
+if (demoBtn) demoBtn.addEventListener('click', () => runDemo());
+if (introDemo) introDemo.addEventListener('click', () => runDemo());
 if (helpOpen) helpOpen.addEventListener('click', openHelp);
 // "?" (Shift+/) 또는 Slash로 재호출, Esc로 닫기 — capture 단계(메인 keydown이 모달 중 early-return하므로)
 window.addEventListener('keydown', (e) => {
